@@ -16,7 +16,7 @@ let cachedToken;
 const buildAuthHeaders = (accessToken) => ({
   Authorization: `Bearer ${accessToken}`,
   'x-api-key': apiKey,
-  Accept: 'application/json',
+  Accept: 'application/vnd.adobe.target.v2+json',
 });
 
 const isTokenValid = (token) => token && token.expiresAt && token.expiresAt > Date.now();
