@@ -68,7 +68,50 @@ async function getActivities(query = {}) {
   }
 }
 
-async function getOffers(query = {}) {
+const normalizeString = (value = '') => value.toString().toLowerCase();
+
+const matchesMboxName = (offer, mboxName) => {
+  if (!mboxName) {
+    return true;
+  }
+
+  const normalizedMboxName = normalizeString(mboxName);
+
+  const offerMboxName = offer?.mboxName ? normalizeString(offer.mboxName) : '';
+  if (offerMboxName === normalizedMboxName) {
+    return true;
+  }
+
+  const offerMboxes = Array.isArray(offer?.mboxes) ? offer.mboxes : [];
+
+  return offerMboxes.some(
+    (mbox) => normalizeString(mbox?.name || mbox?.mboxName) === normalizedMboxName,
+  );
+};
+
+const filterOffersByMboxName = (offersPayload, mboxName) => {
+  if (!mboxName || !offersPayload) {
+    return offersPayload;
+  }
+
+  const filterFn = (offer) => matchesMboxName(offer, mboxName);
+
+  if (Array.isArray(offersPayload)) {
+    return offersPayload.filter(filterFn);
+  }
+
+  if (Array.isArray(offersPayload.offers)) {
+    return {
+      ...offersPayload,
+      offers: offersPayload.offers.filter(filterFn),
+    };
+  }
+
+  return offersPayload;
+};
+
+async function getOffers(queryParam, mboxName) {
+  const query = queryParam || {};
   const accessToken = await fetchAccessToken();
 
   try {
@@ -77,7 +120,7 @@ async function getOffers(query = {}) {
       params: query,
     });
 
-    return data;
+    return filterOffersByMboxName(data, mboxName);
   } catch (error) {
     const details = error.response?.data || error.message;
     throw new Error(`Failed to fetch Adobe Target offers: ${JSON.stringify(details)}`);
@@ -138,10 +181,11 @@ function filterApprovedOffers(offersPayload) {
   return offersPayload;
 }
 
-async function getApprovedOffers(query = {}) {
+async function getApprovedOffers(queryParam, mboxName) {
+  const query = queryParam || {};
   const requestQuery = { ...query, approvalStatus: 'approved' };
 
-  const offersPayload = await getOffers(requestQuery);
+  const offersPayload = await getOffers(requestQuery, mboxName);
   return filterApprovedOffers(offersPayload);
 }
 

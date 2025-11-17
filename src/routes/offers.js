@@ -5,15 +5,26 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    const { status, approvalStatus, ...query } = req.query;
+    const {
+      status,
+      approvalStatus,
+      mboxName,
+      ...query
+    } = req.query;
     const normalizedStatus = (status || approvalStatus || '').toLowerCase();
 
     if (normalizedStatus === 'approved') {
-      const offers = await adobeTargetService.getApprovedOffers({ ...query, approvalStatus });
+      const offers = await adobeTargetService.getApprovedOffers(
+        { ...query, approvalStatus },
+        mboxName,
+      );
       return res.json(offers);
     }
 
-    const offers = await adobeTargetService.getOffers({ ...query, approvalStatus, status });
+    const offers = await adobeTargetService.getOffers(
+      { ...query, approvalStatus, status },
+      mboxName,
+    );
     return res.json(offers);
   } catch (error) {
     return res.status(500).json({
