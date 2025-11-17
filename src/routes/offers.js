@@ -50,7 +50,7 @@ router.get('/:offerId', async (req, res) => {
   const { offerId } = req.params;
 
   try {
-    const offerList = await adobeTargetService.getOffers({ id: offerId });
+    const offerList = await adobeTargetService.getOffers({ search: offerId });
 
     if (!offerList || !offerList.offers || offerList.offers.length === 0) {
       return res.status(404).json({ message: `Offer with ID ${offerId} not found` });
