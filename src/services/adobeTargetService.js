@@ -52,7 +52,31 @@ async function fetchAccessToken() {
   }
 }
 
-async function getActivities(query = {}) {
+const normalizeString = (value = '') => value.toString().toLowerCase();
+
+const filterPayloadItems = (payload, collectionKey, filterFn) => {
+  if (!payload || typeof filterFn !== 'function') {
+    return payload;
+  }
+
+  const filterItems = (items) => items.filter(filterFn);
+
+  if (Array.isArray(payload)) {
+    return filterItems(payload);
+  }
+
+  if (collectionKey && Array.isArray(payload[collectionKey])) {
+    return {
+      ...payload,
+      [collectionKey]: filterItems(payload[collectionKey]),
+    };
+  }
+
+  return payload;
+};
+
+async function getActivities(queryParam, activityName) {
+  const query = queryParam || {};
   const accessToken = await fetchAccessToken();
 
   try {
@@ -61,14 +85,22 @@ async function getActivities(query = {}) {
       params: query,
     });
 
-    return data;
+    if (!activityName) {
+      return data;
+    }
+
+    const normalizedName = normalizeString(activityName);
+
+    return filterPayloadItems(
+      data,
+      'activities',
+      (activity) => normalizeString(activity?.name) === normalizedName,
+    );
   } catch (error) {
     const details = error.response?.data || error.message;
     throw new Error(`Failed to fetch Adobe Target activities: ${JSON.stringify(details)}`);
   }
 }
-
-const normalizeString = (value = '') => value.toString().toLowerCase();
 
 const matchesMboxName = (offer, mboxName) => {
   if (!mboxName) {
@@ -96,18 +128,7 @@ const filterOffersByMboxName = (offersPayload, mboxName) => {
 
   const filterFn = (offer) => matchesMboxName(offer, mboxName);
 
-  if (Array.isArray(offersPayload)) {
-    return offersPayload.filter(filterFn);
-  }
-
-  if (Array.isArray(offersPayload.offers)) {
-    return {
-      ...offersPayload,
-      offers: offersPayload.offers.filter(filterFn),
-    };
-  }
-
-  return offersPayload;
+  return filterPayloadItems(offersPayload, 'offers', filterFn);
 };
 
 async function getOffers(queryParam, mboxName) {
