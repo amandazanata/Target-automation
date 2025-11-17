@@ -35,4 +35,16 @@ router.get('/approved', async (req, res) => {
   }
 });
 
+router.get('/:offerId', async (req, res) => {
+  try {
+    const offer = await adobeTargetService.getOfferDetails(req.params.offerId, req.query);
+    return res.json(offer);
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Unable to fetch Adobe Target offer details',
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;

@@ -84,6 +84,25 @@ async function getOffers(query = {}) {
   }
 }
 
+async function getOfferDetails(offerId, query = {}) {
+  const accessToken = await fetchAccessToken();
+
+  try {
+    const { data } = await axios.get(
+      `${TARGET_API_BASE_URL}/${tenantId}/target/offers/${offerId}`,
+      {
+        headers: buildAuthHeaders(accessToken),
+        params: query,
+      },
+    );
+
+    return data;
+  } catch (error) {
+    const details = error.response?.data || error.message;
+    throw new Error(`Failed to fetch Adobe Target offer details: ${JSON.stringify(details)}`);
+  }
+}
+
 const APPROVED_IDENTIFIER = '[app] travatelashomeprod';
 
 const matchesApprovedStatus = (offer) => offer?.status?.toLowerCase() === 'approved'
@@ -130,5 +149,6 @@ module.exports = {
   fetchAccessToken,
   getActivities,
   getOffers,
+  getOfferDetails,
   getApprovedOffers,
 };
