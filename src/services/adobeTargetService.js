@@ -166,7 +166,7 @@ async function getOfferDetails(offerId, offerType) {
   }
 }
 
-const APPROVED_IDENTIFIER = 'travaTelasHomeProd';
+const APPROVED_IDENTIFIER = 'travatelashomeprod';
 
 const matchesApprovedStatus = (offer) => offer?.status?.toLowerCase() === 'approved'
   || offer?.approvalStatus?.toLowerCase() === 'approved';
@@ -174,10 +174,8 @@ const matchesApprovedStatus = (offer) => offer?.status?.toLowerCase() === 'appro
 const matchesApprovedIdentifier = (offer) => {
   const normalizedIdentifier = APPROVED_IDENTIFIER.toLowerCase();
   const normalizedName = offer?.name?.toLowerCase() || '';
-  const normalizedLabel = offer?.label?.toLowerCase() || '';
 
-  return normalizedName.includes(normalizedIdentifier)
-    || normalizedLabel.includes(normalizedIdentifier);
+  return normalizedName.includes(normalizedIdentifier);
 };
 
 function filterApprovedOffers(offersPayload) {
