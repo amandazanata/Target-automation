@@ -68,7 +68,53 @@ async function getActivities(query = {}) {
   }
 }
 
+async function getOffers(query = {}) {
+  const accessToken = await fetchAccessToken();
+
+  try {
+    const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/offers`, {
+      headers: buildAuthHeaders(accessToken),
+      params: query,
+    });
+
+    return data;
+  } catch (error) {
+    const details = error.response?.data || error.message;
+    throw new Error(`Failed to fetch Adobe Target offers: ${JSON.stringify(details)}`);
+  }
+}
+
+function filterApprovedOffers(offersPayload) {
+  if (!offersPayload) {
+    return offersPayload;
+  }
+
+  if (Array.isArray(offersPayload)) {
+    return offersPayload.filter((offer) => offer?.status?.toLowerCase() === 'approved'
+      || offer?.approvalStatus?.toLowerCase() === 'approved');
+  }
+
+  if (Array.isArray(offersPayload.offers)) {
+    return {
+      ...offersPayload,
+      offers: offersPayload.offers.filter((offer) => offer?.status?.toLowerCase() === 'approved'
+        || offer?.approvalStatus?.toLowerCase() === 'approved'),
+    };
+  }
+
+  return offersPayload;
+}
+
+async function getApprovedOffers(query = {}) {
+  const requestQuery = { ...query, approvalStatus: 'approved' };
+
+  const offersPayload = await getOffers(requestQuery);
+  return filterApprovedOffers(offersPayload);
+}
+
 module.exports = {
   fetchAccessToken,
   getActivities,
+  getOffers,
+  getApprovedOffers,
 };
