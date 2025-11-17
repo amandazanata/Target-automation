@@ -84,21 +84,35 @@ async function getOffers(query = {}) {
   }
 }
 
+const APPROVED_IDENTIFIER = '[app] travatelashomeprod';
+
+const matchesApprovedStatus = (offer) => offer?.status?.toLowerCase() === 'approved'
+  || offer?.approvalStatus?.toLowerCase() === 'approved';
+
+const matchesApprovedIdentifier = (offer) => {
+  const normalizedIdentifier = APPROVED_IDENTIFIER.toLowerCase();
+  const normalizedName = offer?.name?.toLowerCase() || '';
+  const normalizedLabel = offer?.label?.toLowerCase() || '';
+
+  return normalizedName.includes(normalizedIdentifier)
+    || normalizedLabel.includes(normalizedIdentifier);
+};
+
 function filterApprovedOffers(offersPayload) {
   if (!offersPayload) {
     return offersPayload;
   }
 
   if (Array.isArray(offersPayload)) {
-    return offersPayload.filter((offer) => offer?.status?.toLowerCase() === 'approved'
-      || offer?.approvalStatus?.toLowerCase() === 'approved');
+    return offersPayload.filter((offer) => matchesApprovedStatus(offer)
+      && matchesApprovedIdentifier(offer));
   }
 
   if (Array.isArray(offersPayload.offers)) {
     return {
       ...offersPayload,
-      offers: offersPayload.offers.filter((offer) => offer?.status?.toLowerCase() === 'approved'
-        || offer?.approvalStatus?.toLowerCase() === 'approved'),
+      offers: offersPayload.offers.filter((offer) => matchesApprovedStatus(offer)
+        && matchesApprovedIdentifier(offer)),
     };
   }
 
