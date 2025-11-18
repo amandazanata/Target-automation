@@ -102,6 +102,33 @@ async function getActivities(queryParam, activityName) {
   }
 }
 
+async function getActivityDetails(activityId, activityType) {
+  if (!activityId) {
+    throw new Error('An activity id is required to fetch its details');
+  }
+
+  const normalizedType = normalizeString(activityType);
+  if (!['ab', 'xt'].includes(normalizedType)) {
+    throw new Error('Activity type must be either "ab" or "xt"');
+  }
+
+  const accessToken = await fetchAccessToken();
+
+  try {
+    const { data } = await axios.get(
+      `${TARGET_API_BASE_URL}/${tenantId}/target/activities/${normalizedType}/${activityId}`,
+      {
+        headers: buildAuthHeaders(accessToken),
+      },
+    );
+
+    return data;
+  } catch (error) {
+    const details = error.response?.data || error.message;
+    throw new Error(`Failed to fetch Adobe Target activity details: ${JSON.stringify(details)}`);
+  }
+}
+
 const matchesMboxName = (offer, mboxName) => {
   if (!mboxName) {
     return true;
@@ -223,6 +250,7 @@ async function getApprovedOffers(queryParam, mboxName) {
 module.exports = {
   fetchAccessToken,
   getActivities,
+  getActivityDetails,
   getOffers,
   getOfferDetails,
   getApprovedOffers,

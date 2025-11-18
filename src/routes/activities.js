@@ -32,4 +32,21 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/:type/:activityId', async (req, res) => {
+  const { type, activityId } = req.params;
+
+  try {
+    const activityDetails = await adobeTargetService.getActivityDetails(activityId, type);
+    res.json(activityDetails);
+  } catch (error) {
+    const status = error.message.includes('Activity type must be')
+      || error.message.includes('required') ? 400 : 500;
+
+    res.status(status).json({
+      message: 'Unable to fetch Adobe Target activity details',
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;

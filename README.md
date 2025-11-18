@@ -32,7 +32,8 @@ O serviço ficará disponível em `http://localhost:<API_PORT>` (padrão `3001`)
 ## Endpoints
 
 - `GET /health` — Verificação de saúde simples.
-- `GET /activities` — Retorna a lista de atividades do Adobe Target. Aceita os mesmos parâmetros de query suportados pela API original e os encaminha diretamente.
+- `GET /activities` — Retorna somente `id` e `type` das atividades do Adobe Target. Aceita os mesmos parâmetros de query suportados pela API original e os encaminha diretamente.
+- `GET /activities/:type/:id` — Recupera os detalhes completos de uma atividade específica montando o endpoint correto (`/target/activities/ab/{id}` ou `/target/activities/xt/{id}`) de acordo com o tipo informado.
 
 ## Desenvolvimento
 
