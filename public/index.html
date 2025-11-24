@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Adobe Target Automation</title>
+  <style>
+    :root {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f6f7fb;
+      color: #1f2937;
+    }
+
+    body {
+      margin: 0;
+      padding: 0 1rem 2rem;
+    }
+
+    header {
+      background: linear-gradient(90deg, #0ea5e9, #6366f1);
+      color: white;
+      padding: 1.5rem 1rem;
+      margin: 0 -1rem 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.6rem;
+      letter-spacing: 0.5px;
+    }
+
+    h2 {
+      margin: 0.75rem 0;
+      font-size: 1.1rem;
+    }
+
+    p.description {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    main {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1rem;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    }
+
+    .card form {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .field-group {
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      color: #4b5563;
+    }
+
+    input, select {
+      padding: 0.5rem 0.6rem;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+
+    button {
+      background: linear-gradient(90deg, #0ea5e9, #6366f1);
+      color: white;
+      border: none;
+      padding: 0.6rem 0.9rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+      transition: transform 0.05s ease, box-shadow 0.1s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+    }
+
+    .result {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 0.75rem;
+      margin-top: 0.75rem;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .inline {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.5rem;
+    }
+
+    .meta {
+      font-size: 0.9rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Adobe Target Automation</h1>
+    <p class="description">Interface simples para testar rapidamente o back-end.</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Health check</h2>
+      <button id="health-btn" type="button">Verificar /health</button>
+      <pre class="result" id="health-result">Nenhuma chamada ainda.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Listar atividades</h2>
+      <form id="activities-form">
+        <div class="field-group">
+          <label for="activity-name">Nome da atividade (opcional)</label>
+          <input id="activity-name" name="activityName" placeholder="ex: Promoção" />
+        </div>
+        <div class="inline">
+          <div class="field-group">
+            <label for="activity-type">Tipo</label>
+            <input id="activity-type" name="type" placeholder="ex: ab" />
+          </div>
+          <div class="field-group">
+            <label for="activity-status">Status</label>
+            <input id="activity-status" name="status" placeholder="ex: active" />
+          </div>
+        </div>
+        <button type="submit">Buscar atividades</button>
+      </form>
+      <pre class="result" id="activities-result">Nenhuma chamada ainda.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Detalhes da atividade</h2>
+      <form id="activity-details-form" class="inline">
+        <div class="field-group">
+          <label for="details-type">Tipo</label>
+          <input id="details-type" name="type" placeholder="ex: ab" required />
+        </div>
+        <div class="field-group">
+          <label for="details-id">ID</label>
+          <input id="details-id" name="activityId" placeholder="ex: 12345" required />
+        </div>
+        <button type="submit">Buscar detalhes</button>
+      </form>
+      <pre class="result" id="activity-details-result">Nenhuma chamada ainda.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Listar ofertas</h2>
+      <form id="offers-form">
+        <div class="inline">
+          <div class="field-group">
+            <label for="offer-status">Status ou aprovação</label>
+            <input id="offer-status" name="status" placeholder="approved" />
+            <p class="meta">Use "approved" para buscar apenas aprovadas.</p>
+          </div>
+          <div class="field-group">
+            <label for="offer-mbox">Mbox (opcional)</label>
+            <input id="offer-mbox" name="mboxName" placeholder="ex: homepage" />
+          </div>
+        </div>
+        <button type="submit">Buscar ofertas</button>
+      </form>
+      <pre class="result" id="offers-result">Nenhuma chamada ainda.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Detalhes da oferta</h2>
+      <form id="offer-details-form" class="inline">
+        <div class="field-group">
+          <label for="offer-id">ID da oferta</label>
+          <input id="offer-id" name="offerId" placeholder="ex: 6789" required />
+        </div>
+        <button type="submit">Buscar detalhes</button>
+      </form>
+      <pre class="result" id="offer-details-result">Nenhuma chamada ainda.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Oferta JSON por atividade</h2>
+      <form id="offer-json-form">
+        <div class="inline">
+          <div class="field-group">
+            <label for="json-activity-id">ID da atividade</label>
+            <input id="json-activity-id" name="activityId" placeholder="ex: 12345" required />
+          </div>
+          <div class="field-group">
+            <label for="json-activity-type">Tipo da atividade</label>
+            <input id="json-activity-type" name="activityType" placeholder="ex: ab" required />
+          </div>
+        </div>
+        <button type="submit">Buscar oferta JSON</button>
+      </form>
+      <pre class="result" id="offer-json-result">Nenhuma chamada ainda.</pre>
+    </section>
+  </main>
+
+  <script>
+    const formatResult = (elementId, data) => {
+      const element = document.getElementById(elementId);
+      element.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+    };
+
+    const handleFetch = async (url, options = {}, resultId) => {
+      formatResult(resultId, 'Carregando...');
+      try {
+        const response = await fetch(url, options);
+        const payload = await response.json();
+        formatResult(resultId, payload);
+      } catch (error) {
+        formatResult(resultId, `Erro: ${error.message}`);
+      }
+    };
+
+    document.getElementById('health-btn').addEventListener('click', () => {
+      handleFetch('/health', {}, 'health-result');
+    });
+
+    document.getElementById('activities-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const params = new URLSearchParams(new FormData(event.target));
+      const query = params.toString();
+      handleFetch(`/activities${query ? `?${query}` : ''}`, {}, 'activities-result');
+    });
+
+    document.getElementById('activity-details-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const { type, activityId } = Object.fromEntries(new FormData(event.target));
+      handleFetch(`/activities/${type}/${activityId}`, {}, 'activity-details-result');
+    });
+
+    document.getElementById('offers-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const params = new URLSearchParams(new FormData(event.target));
+      const query = params.toString();
+      handleFetch(`/offers${query ? `?${query}` : ''}`, {}, 'offers-result');
+    });
+
+    document.getElementById('offer-details-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const { offerId } = Object.fromEntries(new FormData(event.target));
+      handleFetch(`/offers/${offerId}`, {}, 'offer-details-result');
+    });
+
+    document.getElementById('offer-json-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const params = new URLSearchParams(new FormData(event.target));
+      const query = params.toString();
+      handleFetch(`/target/offers/json?${query}`, {}, 'offer-json-result');
+    });
+  </script>
+</body>
+</html>
