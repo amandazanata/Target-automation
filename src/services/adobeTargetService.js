@@ -54,8 +54,11 @@ async function fetchAccessToken() {
 
 const normalizeString = (value = '') => value.toString().toLowerCase();
 
-const findJsonOfferReference = (payload) => {
+const findJsonOfferReference = (payload, activityId) => {
   const visited = new Set();
+  let potentialMatch = null;
+
+  const normalizedActivityId = normalizeString(activityId);
 
   const search = (node) => {
     if (!node || visited.has(node)) {
@@ -78,9 +81,18 @@ const findJsonOfferReference = (payload) => {
     if (typeof node === 'object') {
       const offerId = node.offerId || node.id;
       const offerType = normalizeString(node.offerType || node.type);
+      const normalizedOfferId = normalizeString(offerId);
 
-      if (offerId && offerType === 'json') {
-        return { id: offerId, type: 'json' };
+      const isActivityId = normalizedOfferId && normalizedOfferId === normalizedActivityId;
+
+      if (offerId && !isActivityId) {
+        if (offerType === 'json') {
+          return { id: offerId, type: 'json' };
+        }
+
+        if (!potentialMatch) {
+          potentialMatch = { id: offerId, type: offerType || 'json' };
+        }
       }
 
       // eslint-disable-next-line no-restricted-syntax
@@ -95,7 +107,9 @@ const findJsonOfferReference = (payload) => {
     return null;
   };
 
-  return search(payload);
+  const explicitMatch = search(payload);
+
+  return explicitMatch || potentialMatch;
 };
 
 const filterPayloadItems = (payload, collectionKey, filterFn) => {
@@ -239,9 +253,17 @@ async function getOfferDetails(offerId, offerType) {
 
 async function getJsonOfferFromActivity(activityId, activityType) {
   const activityDetails = await getActivityDetails(activityId, activityType);
-  const offerReference = findJsonOfferReference(activityDetails);
+  const offerReference = findJsonOfferReference(activityDetails, activityId);
 
   if (!offerReference) {
+    const payloadSnippet = JSON.stringify(activityDetails)?.slice(0, 500);
+    // eslint-disable-next-line no-console
+    console.error('No JSON offer reference found in the provided activity', {
+      activityId,
+      activityType,
+      payloadSnippet,
+    });
+
     throw new Error('No JSON offer reference found in the provided activity');
   }
 
