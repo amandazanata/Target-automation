@@ -55,15 +55,16 @@ async function fetchAccessToken() {
 
 const normalizeString = (value = '') => value.toString().toLowerCase();
 
-const findAllJsonOfferReferences = (payload, activityId) => {
-  const visited = new Set();
+const findJsonOfferReferences = (payload, activityId) => {
+  const visited = new WeakSet();
   const matches = [];
   const seenIds = new Set();
 
   const normalizedActivityId = normalizeString(activityId);
 
   const search = (node) => {
-    if (!node || visited.has(node)) return;
+    if (!node || typeof node !== 'object') return;
+    if (visited.has(node)) return;
     visited.add(node);
 
     if (Array.isArray(node)) {
@@ -161,7 +162,7 @@ async function getOfferDetails(offerId, offerType) {
 
 async function getJsonOfferFromActivity(activityId, activityType) {
   const activityDetails = await getActivityDetails(activityId, activityType);
-  const offerReferences = findAllJsonOfferReferences(activityDetails, activityId);
+  const offerReferences = findJsonOfferReferences(activityDetails, activityId);
 
   if (!offerReferences || offerReferences.length === 0) {
     const payloadSnippet = JSON.stringify(activityDetails)?.slice(0, 500);
@@ -230,8 +231,8 @@ module.exports = {
   getActivities,
   getActivityDetails,
   getOfferDetails,
-  findJsonOfferReference: findAllJsonOfferReferences,
-  findAllJsonOfferReferences,
+  findJsonOfferReference: findJsonOfferReferences,
+  findJsonOfferReferences,
   getJsonOfferFromActivity,
   getTravaTelasOffers,
 };
