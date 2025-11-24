@@ -60,7 +60,6 @@ const findAllJsonOfferReferences = (payload, activityId) => {
   const matches = [];
   const seenIds = new Set();
 
-  const normalizeString = (value = '') => value.toString().toLowerCase();
   const normalizedActivityId = normalizeString(activityId);
 
   const search = (node) => {
@@ -80,7 +79,10 @@ const findAllJsonOfferReferences = (payload, activityId) => {
       const isActivityId = normalizedOfferId && normalizedOfferId === normalizedActivityId;
 
       if (offerId && !isActivityId) {
-        if ((offerType === 'json' || offerType === 'content') && !seenIds.has(normalizedOfferId)) {
+        const isValidType = offerType === 'json' || offerType === 'content';
+        const isMissingType = !offerType;
+
+        if ((isValidType || isMissingType) && !seenIds.has(normalizedOfferId)) {
           seenIds.add(normalizedOfferId);
           matches.push({ id: offerId, type: 'json' });
         }
@@ -200,7 +202,7 @@ async function getTravaTelasOffers() {
   );
 
   // 5. Busca o conteúdo JSON para as atividades restantes
-  const offers = await Promise.all(
+  const results = await Promise.all(
     activeActivities.map(async (activity) => {
       try {
         const offerPayload = await getJsonOfferFromActivity(activity.id, activity.type);
@@ -213,14 +215,14 @@ async function getTravaTelasOffers() {
           offers: offerPayload.offers,
         };
       } catch (error) {
-        console.error(`Erro ao buscar oferta para atividade ${activity.id}:`, error.message);
+        console.error(`Erro ao buscar ofertas para atividade ${activity.id}:`, error.message);
         return null; // Retorna null em caso de falha individual para não quebrar o Promise.all
       }
     }),
   );
 
   // Remove eventuais nulos gerados por erros
-  return offers.filter((offer) => offer !== null);
+  return results.filter((result) => result !== null);
 }
 
 module.exports = {
