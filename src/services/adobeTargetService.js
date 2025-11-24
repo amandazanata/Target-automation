@@ -55,28 +55,21 @@ async function fetchAccessToken() {
 
 const normalizeString = (value = '') => value.toString().toLowerCase();
 
-const findJsonOfferReference = (payload, activityId) => {
+const findAllJsonOfferReferences = (payload, activityId) => {
   const visited = new Set();
-  let potentialMatch = null;
+  const matches = [];
+  const seenIds = new Set();
 
+  const normalizeString = (value = '') => value.toString().toLowerCase();
   const normalizedActivityId = normalizeString(activityId);
 
   const search = (node) => {
-    if (!node || visited.has(node)) {
-      return null;
-    }
-
+    if (!node || visited.has(node)) return;
     visited.add(node);
 
     if (Array.isArray(node)) {
-      // eslint-disable-next-line no-restricted-syntax
-      for (const item of node) {
-        const result = search(item);
-        if (result) {
-          return result;
-        }
-      }
-      return null;
+      for (const item of node) search(item);
+      return;
     }
 
     if (typeof node === 'object') {
@@ -87,30 +80,20 @@ const findJsonOfferReference = (payload, activityId) => {
       const isActivityId = normalizedOfferId && normalizedOfferId === normalizedActivityId;
 
       if (offerId && !isActivityId) {
-        if (offerType === 'json') {
-          return { id: offerId, type: 'json' };
-        }
-
-        if (!potentialMatch) {
-          potentialMatch = { id: offerId, type: offerType || 'json' };
+        if ((offerType === 'json' || offerType === 'content') && !seenIds.has(normalizedOfferId)) {
+          seenIds.add(normalizedOfferId);
+          matches.push({ id: offerId, type: 'json' });
         }
       }
 
-      // eslint-disable-next-line no-restricted-syntax
       for (const value of Object.values(node)) {
-        const result = search(value);
-        if (result) {
-          return result;
-        }
+        search(value);
       }
     }
-
-    return null;
   };
 
-  const explicitMatch = search(payload);
-
-  return explicitMatch || potentialMatch;
+  search(payload);
+  return matches;
 };
 
 async function getActivities(params = {}) {
@@ -176,28 +159,23 @@ async function getOfferDetails(offerId, offerType) {
 
 async function getJsonOfferFromActivity(activityId, activityType) {
   const activityDetails = await getActivityDetails(activityId, activityType);
-  const offerReference = findJsonOfferReference(activityDetails, activityId);
+  const offerReferences = findAllJsonOfferReferences(activityDetails, activityId);
 
-  if (!offerReference) {
+  if (!offerReferences || offerReferences.length === 0) {
     const payloadSnippet = JSON.stringify(activityDetails)?.slice(0, 500);
     // eslint-disable-next-line no-console
-    console.error('No JSON offer reference found in the provided activity', {
-      activityId,
-      activityType,
-      payloadSnippet,
-    });
-
-    throw new Error('No JSON offer reference found in the provided activity');
+    console.error('No JSON offers found', { activityId, payloadSnippet });
+    throw new Error('No JSON offers found in the provided activity');
   }
 
-  const offerDetails = await getOfferDetails(offerReference.id, offerReference.type);
+  const offersDetails = await Promise.all(
+    offerReferences.map((ref) => getOfferDetails(ref.id, ref.type)),
+  );
 
   return {
     activityId,
     activityType: normalizeString(activityType),
-    offerId: offerReference.id,
-    offerType: offerReference.type,
-    offer: offerDetails,
+    offers: offersDetails,
   };
 }
 
@@ -232,7 +210,7 @@ async function getTravaTelasOffers() {
           activityType: normalizeString(activity.type),
           status: activity.state,
           lifetime: activity.lifetime, // Útil para depuração
-          offer: offerPayload.offer,
+          offers: offerPayload.offers,
         };
       } catch (error) {
         console.error(`Erro ao buscar oferta para atividade ${activity.id}:`, error.message);
@@ -250,7 +228,8 @@ module.exports = {
   getActivities,
   getActivityDetails,
   getOfferDetails,
-  findJsonOfferReference,
+  findJsonOfferReference: findAllJsonOfferReferences,
+  findAllJsonOfferReferences,
   getJsonOfferFromActivity,
   getTravaTelasOffers,
 };
