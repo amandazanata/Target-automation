@@ -54,6 +54,50 @@ async function fetchAccessToken() {
 
 const normalizeString = (value = '') => value.toString().toLowerCase();
 
+const findJsonOfferReference = (payload) => {
+  const visited = new Set();
+
+  const search = (node) => {
+    if (!node || visited.has(node)) {
+      return null;
+    }
+
+    visited.add(node);
+
+    if (Array.isArray(node)) {
+      // eslint-disable-next-line no-restricted-syntax
+      for (const item of node) {
+        const result = search(item);
+        if (result) {
+          return result;
+        }
+      }
+      return null;
+    }
+
+    if (typeof node === 'object') {
+      const offerId = node.offerId || node.id;
+      const offerType = normalizeString(node.offerType || node.type);
+
+      if (offerId && offerType === 'json') {
+        return { id: offerId, type: 'json' };
+      }
+
+      // eslint-disable-next-line no-restricted-syntax
+      for (const value of Object.values(node)) {
+        const result = search(value);
+        if (result) {
+          return result;
+        }
+      }
+    }
+
+    return null;
+  };
+
+  return search(payload);
+};
+
 const filterPayloadItems = (payload, collectionKey, filterFn) => {
   if (!payload || typeof filterFn !== 'function') {
     return payload;
@@ -193,6 +237,25 @@ async function getOfferDetails(offerId, offerType) {
   }
 }
 
+async function getJsonOfferFromActivity(activityId, activityType) {
+  const activityDetails = await getActivityDetails(activityId, activityType);
+  const offerReference = findJsonOfferReference(activityDetails);
+
+  if (!offerReference) {
+    throw new Error('No JSON offer reference found in the provided activity');
+  }
+
+  const offerDetails = await getOfferDetails(offerReference.id, offerReference.type);
+
+  return {
+    activityId,
+    activityType: normalizeString(activityType),
+    offerId: offerReference.id,
+    offerType: offerReference.type,
+    offer: offerDetails,
+  };
+}
+
 const OFFER_IDENTIFIER = 'travatelashomeprod';
 
 const matchesApprovedStatus = (offer) => offer?.status?.toLowerCase() === 'approved'
@@ -255,4 +318,5 @@ module.exports = {
   getOfferDetails,
   getApprovedOffers,
   filterOffersByNameAndType,
+  getJsonOfferFromActivity,
 };

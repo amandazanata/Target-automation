@@ -2,6 +2,7 @@ const express = require('express');
 const environment = require('./config/environment');
 const activitiesRouter = require('./routes/activities');
 const offersRouter = require('./routes/offers');
+const targetRouter = require('./routes/target');
 
 const app = express();
 
@@ -11,6 +12,7 @@ app.get('/health', (_, res) => {
 
 app.use('/activities', activitiesRouter);
 app.use('/offers', offersRouter);
+app.use('/target', targetRouter);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
