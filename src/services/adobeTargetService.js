@@ -202,30 +202,47 @@ async function getJsonOfferFromActivity(activityId, activityType) {
 }
 
 async function getTravaTelasOffers() {
+  // 1. Busca todas as atividades
   const { activities = [] } = await getActivities();
 
+  // 2. Filtra por Nome: deve conter '[APP] travaTelasHomeProd'
   const matchingActivities = activities.filter((activity) => (
     activity?.name?.includes(TRAVA_TELAS_IDENTIFIER)
   ));
 
+  // 3. Filtra por Status: deve ser 'approved'
   const approvedActivities = matchingActivities.filter((activity) => (
     normalizeString(activity?.state) === 'approved'
   ));
 
+  // 4. Filtra por Lifetime: NÃO deve possuir data de término ('end')
+  // Atividades com 'lifetime.end' definido são descartadas
+  const activeActivities = approvedActivities.filter(
+    (activity) => !activity.lifetime || !activity.lifetime.end,
+  );
+
+  // 5. Busca o conteúdo JSON para as atividades restantes
   const offers = await Promise.all(
-    approvedActivities.map(async (activity) => {
-      const offerPayload = await getJsonOfferFromActivity(activity.id, activity.type);
-      return {
-        activityId: activity.id,
-        activityName: activity.name,
-        activityType: normalizeString(activity.type),
-        status: activity.state,
-        offer: offerPayload.offer,
-      };
+    activeActivities.map(async (activity) => {
+      try {
+        const offerPayload = await getJsonOfferFromActivity(activity.id, activity.type);
+        return {
+          activityId: activity.id,
+          activityName: activity.name,
+          activityType: normalizeString(activity.type),
+          status: activity.state,
+          lifetime: activity.lifetime, // Útil para depuração
+          offer: offerPayload.offer,
+        };
+      } catch (error) {
+        console.error(`Erro ao buscar oferta para atividade ${activity.id}:`, error.message);
+        return null; // Retorna null em caso de falha individual para não quebrar o Promise.all
+      }
     }),
   );
 
-  return offers;
+  // Remove eventuais nulos gerados por erros
+  return offers.filter((offer) => offer !== null);
 }
 
 module.exports = {
