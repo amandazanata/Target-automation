@@ -120,6 +120,17 @@
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 0.5rem;
     }
+
+    .counter {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 0.6rem 0.75rem;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -135,7 +146,10 @@
         Busca todas as atividades contendo <strong>[APP] travaTelasHomeProd</strong>
         e com status <strong>approved</strong>, retornando suas ofertas JSON com o total encontrado.
       </p>
-      <button type="button" id="btn-trava-telas" class="secondary">Executar Automação</button>
+      <div class="inline">
+        <button type="button" id="btn-trava-telas" class="secondary">Executar Automação</button>
+        <div id="trava-telas-counter" class="counter">Ofertas: --</div>
+      </div>
       <pre class="result" id="trava-telas-result">Aguardando execução...</pre>
     </section>
   </main>
@@ -146,19 +160,28 @@
       element.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
     };
 
-    const handleFetch = async (url, options = {}, resultId) => {
+    const handleFetch = async (url, options = {}, resultId, onSuccess) => {
       formatResult(resultId, 'Carregando...');
       try {
         const response = await fetch(url, options);
         const payload = await response.json();
         formatResult(resultId, payload);
+        if (typeof onSuccess === 'function') {
+          onSuccess(payload);
+        }
       } catch (error) {
         formatResult(resultId, `Erro: ${error.message}`);
       }
     };
 
     document.getElementById('btn-trava-telas').addEventListener('click', () => {
-      handleFetch('/target/automation/trava-telas', {}, 'trava-telas-result');
+      handleFetch('/target/automation/trava-telas', {}, 'trava-telas-result', (payload) => {
+        const counter = document.getElementById('trava-telas-counter');
+        if (counter) {
+          const total = payload?.totalOffers;
+          counter.textContent = `Ofertas: ${typeof total === 'number' ? total : '--'}`;
+        }
+      });
     });
   </script>
 </body>
