@@ -112,54 +112,6 @@ const findJsonOfferReference = (payload, activityId) => {
   return explicitMatch || potentialMatch;
 };
 
-const filterPayloadItems = (payload, collectionKey, filterFn) => {
-  if (!payload || typeof filterFn !== 'function') {
-    return payload;
-  }
-
-  const filterItems = (items) => items.filter(filterFn);
-
-  if (Array.isArray(payload)) {
-    return filterItems(payload);
-  }
-
-  if (collectionKey && Array.isArray(payload[collectionKey])) {
-    return {
-      ...payload,
-      [collectionKey]: filterItems(payload[collectionKey]),
-    };
-  }
-
-  return payload;
-};
-
-async function getActivities(queryParam, activityName) {
-  const query = queryParam || {};
-  const accessToken = await fetchAccessToken();
-
-  try {
-    const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/activities`, {
-      headers: buildAuthHeaders(accessToken),
-      params: query,
-    });
-
-    if (!activityName) {
-      return data;
-    }
-
-    const normalizedName = normalizeString(activityName);
-
-    return filterPayloadItems(
-      data,
-      'activities',
-      (activity) => normalizeString(activity?.name) === normalizedName,
-    );
-  } catch (error) {
-    const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target activities: ${JSON.stringify(details)}`);
-  }
-}
-
 async function getActivityDetails(activityId, activityType) {
   if (!activityId) {
     throw new Error('An activity id is required to fetch its details');
@@ -184,52 +136,6 @@ async function getActivityDetails(activityId, activityType) {
   } catch (error) {
     const details = error.response?.data || error.message;
     throw new Error(`Failed to fetch Adobe Target activity details: ${JSON.stringify(details)}`);
-  }
-}
-
-const matchesMboxName = (offer, mboxName) => {
-  if (!mboxName) {
-    return true;
-  }
-
-  const normalizedMboxName = normalizeString(mboxName);
-
-  const offerMboxName = offer?.mboxName ? normalizeString(offer.mboxName) : '';
-  if (offerMboxName === normalizedMboxName) {
-    return true;
-  }
-
-  const offerMboxes = Array.isArray(offer?.mboxes) ? offer.mboxes : [];
-
-  return offerMboxes.some(
-    (mbox) => normalizeString(mbox?.name || mbox?.mboxName) === normalizedMboxName,
-  );
-};
-
-const filterOffersByMboxName = (offersPayload, mboxName) => {
-  if (!mboxName || !offersPayload) {
-    return offersPayload;
-  }
-
-  const filterFn = (offer) => matchesMboxName(offer, mboxName);
-
-  return filterPayloadItems(offersPayload, 'offers', filterFn);
-};
-
-async function getOffers(queryParam, mboxName) {
-  const query = queryParam || {};
-  const accessToken = await fetchAccessToken();
-
-  try {
-    const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/offers`, {
-      headers: buildAuthHeaders(accessToken),
-      params: query,
-    });
-
-    return filterOffersByMboxName(data, mboxName);
-  } catch (error) {
-    const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target offers: ${JSON.stringify(details)}`);
   }
 }
 
@@ -278,67 +184,10 @@ async function getJsonOfferFromActivity(activityId, activityType) {
   };
 }
 
-const OFFER_IDENTIFIER = 'travatelashomeprod';
-
-const matchesApprovedStatus = (offer) => offer?.status?.toLowerCase() === 'approved'
-  || offer?.approvalStatus?.toLowerCase() === 'approved';
-
-const matchesOfferIdentifier = (offer) => {
-  const normalizedIdentifier = OFFER_IDENTIFIER.toLowerCase();
-  const normalizedName = offer?.name?.toLowerCase() || '';
-
-  return normalizedName.includes(normalizedIdentifier);
-};
-
-const isJsonOffer = (offer) => normalizeString(offer?.type) === 'json';
-
-const matchesOfferCriteria = (offer) => matchesOfferIdentifier(offer) && isJsonOffer(offer);
-
-const matchesApprovedOffer = (offer) => matchesApprovedStatus(offer) && matchesOfferCriteria(offer);
-
-const filterOffersPayload = (offersPayload, filterFn) => {
-  if (!offersPayload || typeof filterFn !== 'function') {
-    return offersPayload;
-  }
-
-  if (Array.isArray(offersPayload)) {
-    return offersPayload.filter(filterFn);
-  }
-
-  if (Array.isArray(offersPayload.offers)) {
-    return {
-      ...offersPayload,
-      offers: offersPayload.offers.filter(filterFn),
-    };
-  }
-
-  return offersPayload;
-};
-
-const filterOffersByNameAndType = (offersPayload) => filterOffersPayload(
-  offersPayload,
-  matchesOfferCriteria,
-);
-
-function filterApprovedOffers(offersPayload) {
-  return filterOffersPayload(offersPayload, matchesApprovedOffer);
-}
-
-async function getApprovedOffers(queryParam, mboxName) {
-  const query = queryParam || {};
-  const requestQuery = { ...query, approvalStatus: 'approved' };
-
-  const offersPayload = await getOffers(requestQuery, mboxName);
-  return filterApprovedOffers(offersPayload);
-}
-
 module.exports = {
   fetchAccessToken,
-  getActivities,
   getActivityDetails,
-  getOffers,
   getOfferDetails,
-  getApprovedOffers,
-  filterOffersByNameAndType,
+  findJsonOfferReference,
   getJsonOfferFromActivity,
 };

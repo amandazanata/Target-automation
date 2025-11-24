@@ -1,20 +1,12 @@
 const express = require('express');
 const path = require('path');
 const environment = require('./config/environment');
-const activitiesRouter = require('./routes/activities');
-const offersRouter = require('./routes/offers');
 const targetRouter = require('./routes/target');
 
 const app = express();
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-app.get('/health', (_, res) => {
-  res.json({ status: 'ok' });
-});
-
-app.use('/activities', activitiesRouter);
-app.use('/offers', offersRouter);
 app.use('/target', targetRouter);
 
 app.use((req, res) => {

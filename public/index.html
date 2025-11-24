@@ -109,12 +109,6 @@
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 0.5rem;
     }
-
-    .meta {
-      font-size: 0.9rem;
-      color: #6b7280;
-      margin-top: 0.25rem;
-    }
   </style>
 </head>
 <body>
@@ -124,81 +118,6 @@
   </header>
 
   <main>
-    <section class="card">
-      <h2>Health check</h2>
-      <button id="health-btn" type="button">Verificar /health</button>
-      <pre class="result" id="health-result">Nenhuma chamada ainda.</pre>
-    </section>
-
-    <section class="card">
-      <h2>Listar atividades</h2>
-      <form id="activities-form">
-        <div class="field-group">
-          <label for="activity-name">Nome da atividade (opcional)</label>
-          <input id="activity-name" name="activityName" placeholder="ex: Promoção" />
-        </div>
-        <div class="inline">
-          <div class="field-group">
-            <label for="activity-type">Tipo</label>
-            <input id="activity-type" name="type" placeholder="ex: ab" />
-          </div>
-          <div class="field-group">
-            <label for="activity-status">Status</label>
-            <input id="activity-status" name="status" placeholder="ex: active" />
-          </div>
-        </div>
-        <button type="submit">Buscar atividades</button>
-      </form>
-      <pre class="result" id="activities-result">Nenhuma chamada ainda.</pre>
-    </section>
-
-    <section class="card">
-      <h2>Detalhes da atividade</h2>
-      <form id="activity-details-form" class="inline">
-        <div class="field-group">
-          <label for="details-type">Tipo</label>
-          <input id="details-type" name="type" placeholder="ex: ab" required />
-        </div>
-        <div class="field-group">
-          <label for="details-id">ID</label>
-          <input id="details-id" name="activityId" placeholder="ex: 12345" required />
-        </div>
-        <button type="submit">Buscar detalhes</button>
-      </form>
-      <pre class="result" id="activity-details-result">Nenhuma chamada ainda.</pre>
-    </section>
-
-    <section class="card">
-      <h2>Listar ofertas</h2>
-      <form id="offers-form">
-        <div class="inline">
-          <div class="field-group">
-            <label for="offer-status">Status ou aprovação</label>
-            <input id="offer-status" name="status" placeholder="approved" />
-            <p class="meta">Use "approved" para buscar apenas aprovadas.</p>
-          </div>
-          <div class="field-group">
-            <label for="offer-mbox">Mbox (opcional)</label>
-            <input id="offer-mbox" name="mboxName" placeholder="ex: homepage" />
-          </div>
-        </div>
-        <button type="submit">Buscar ofertas</button>
-      </form>
-      <pre class="result" id="offers-result">Nenhuma chamada ainda.</pre>
-    </section>
-
-    <section class="card">
-      <h2>Detalhes da oferta</h2>
-      <form id="offer-details-form" class="inline">
-        <div class="field-group">
-          <label for="offer-id">ID da oferta</label>
-          <input id="offer-id" name="offerId" placeholder="ex: 6789" required />
-        </div>
-        <button type="submit">Buscar detalhes</button>
-      </form>
-      <pre class="result" id="offer-details-result">Nenhuma chamada ainda.</pre>
-    </section>
-
     <section class="card">
       <h2>Oferta JSON por atividade</h2>
       <form id="offer-json-form">
@@ -234,36 +153,6 @@
         formatResult(resultId, `Erro: ${error.message}`);
       }
     };
-
-    document.getElementById('health-btn').addEventListener('click', () => {
-      handleFetch('/health', {}, 'health-result');
-    });
-
-    document.getElementById('activities-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const params = new URLSearchParams(new FormData(event.target));
-      const query = params.toString();
-      handleFetch(`/activities${query ? `?${query}` : ''}`, {}, 'activities-result');
-    });
-
-    document.getElementById('activity-details-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const { type, activityId } = Object.fromEntries(new FormData(event.target));
-      handleFetch(`/activities/${type}/${activityId}`, {}, 'activity-details-result');
-    });
-
-    document.getElementById('offers-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const params = new URLSearchParams(new FormData(event.target));
-      const query = params.toString();
-      handleFetch(`/offers${query ? `?${query}` : ''}`, {}, 'offers-result');
-    });
-
-    document.getElementById('offer-details-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const { offerId } = Object.fromEntries(new FormData(event.target));
-      handleFetch(`/offers/${offerId}`, {}, 'offer-details-result');
-    });
 
     document.getElementById('offer-json-form').addEventListener('submit', (event) => {
       event.preventDefault();
