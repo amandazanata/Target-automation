@@ -130,28 +130,10 @@
 
   <main>
     <section class="card">
-      <h2>Oferta JSON por atividade (Manual)</h2>
-      <form id="offer-json-form">
-        <div class="inline">
-          <div class="field-group">
-            <label for="json-activity-id">ID da atividade</label>
-            <input id="json-activity-id" name="activityId" placeholder="ex: 12345" required />
-          </div>
-          <div class="field-group">
-            <label for="json-activity-type">Tipo da atividade</label>
-            <input id="json-activity-type" name="activityType" placeholder="ex: ab" required />
-          </div>
-        </div>
-        <button type="submit">Buscar oferta JSON</button>
-      </form>
-      <pre class="result" id="offer-json-result">Nenhuma chamada ainda.</pre>
-    </section>
-
-    <section class="card">
       <h2>Automação: Trava Telas Home Prod</h2>
       <p style="margin-bottom: 1rem; color: #4b5563; font-size: 0.9rem; line-height: 1.4;">
-        Busca todas as atividades contendo <strong>[APP] travaTelasHomeProd</strong> 
-        e com status <strong>approved</strong>, retornando suas ofertas JSON.
+        Busca todas as atividades contendo <strong>[APP] travaTelasHomeProd</strong>
+        e com status <strong>approved</strong>, retornando suas ofertas JSON com o total encontrado.
       </p>
       <button type="button" id="btn-trava-telas" class="secondary">Executar Automação</button>
       <pre class="result" id="trava-telas-result">Aguardando execução...</pre>
@@ -175,15 +157,6 @@
       }
     };
 
-    // Manual Form
-    document.getElementById('offer-json-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const params = new URLSearchParams(new FormData(event.target));
-      const query = params.toString();
-      handleFetch(`/target/offers/json?${query}`, {}, 'offer-json-result');
-    });
-
-    // Automation Button
     document.getElementById('btn-trava-telas').addEventListener('click', () => {
       handleFetch('/target/automation/trava-telas', {}, 'trava-telas-result');
     });
