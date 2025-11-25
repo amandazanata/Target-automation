@@ -55,15 +55,15 @@ async function fetchAccessToken() {
 
 const normalizeString = (value = '') => value.toString().toLowerCase();
 
-const findJsonOfferReference = (payload, activityId) => {
+const findJsonOfferReferences = (payload, activityId) => {
   const visited = new Set();
-  let potentialMatch = null;
+  const references = new Map();
 
   const normalizedActivityId = normalizeString(activityId);
 
   const search = (node) => {
     if (!node || visited.has(node)) {
-      return null;
+      return;
     }
 
     visited.add(node);
@@ -71,47 +71,41 @@ const findJsonOfferReference = (payload, activityId) => {
     if (Array.isArray(node)) {
       // eslint-disable-next-line no-restricted-syntax
       for (const item of node) {
-        const result = search(item);
-        if (result) {
-          return result;
-        }
+        search(item);
       }
-      return null;
+      return;
     }
 
     if (typeof node === 'object') {
       const offerId = node.offerId || node.id;
-      const offerType = normalizeString(node.offerType || node.type);
       const normalizedOfferId = normalizeString(offerId);
+      const offerType = normalizeString(node.offerType || node.type) || 'json';
 
       const isActivityId = normalizedOfferId && normalizedOfferId === normalizedActivityId;
 
       if (offerId && !isActivityId) {
-        if (offerType === 'json') {
-          return { id: offerId, type: 'json' };
-        }
+        const existing = references.get(offerId);
 
-        if (!potentialMatch) {
-          potentialMatch = { id: offerId, type: offerType || 'json' };
+        if (!existing || (existing.type !== 'json' && offerType === 'json')) {
+          references.set(offerId, { id: offerId, type: offerType });
         }
       }
 
       // eslint-disable-next-line no-restricted-syntax
       for (const value of Object.values(node)) {
-        const result = search(value);
-        if (result) {
-          return result;
-        }
+        search(value);
       }
     }
-
-    return null;
   };
 
-  const explicitMatch = search(payload);
+  search(payload);
 
-  return explicitMatch || potentialMatch;
+  return Array.from(references.values());
 };
+
+const findJsonOfferReference = (payload, activityId) => (
+  findJsonOfferReferences(payload, activityId)[0] || null
+);
 
 async function getActivities(params = {}) {
   const accessToken = await fetchAccessToken();
@@ -176,7 +170,7 @@ async function getOfferDetails(offerId, offerType) {
 
 async function getJsonOfferFromActivity(activityId, activityType) {
   const activityDetails = await getActivityDetails(activityId, activityType);
-  const offerReference = findJsonOfferReference(activityDetails, activityId);
+  const [offerReference] = findJsonOfferReferences(activityDetails, activityId);
 
   if (!offerReference) {
     const payloadSnippet = JSON.stringify(activityDetails)?.slice(0, 500);
@@ -201,6 +195,46 @@ async function getJsonOfferFromActivity(activityId, activityType) {
   };
 }
 
+async function getJsonOffersFromActivity(activityId, activityType) {
+  const activityDetails = await getActivityDetails(activityId, activityType);
+  const hasLifetimeEnd = Boolean(
+    activityDetails?.lifetime?.end || activityDetails?.lifetime?.endDate,
+  );
+
+  if (hasLifetimeEnd) {
+    return { activityDetails, offers: [] };
+  }
+
+  const offerReferences = findJsonOfferReferences(activityDetails, activityId);
+
+  if (!offerReferences.length) {
+    const payloadSnippet = JSON.stringify(activityDetails)?.slice(0, 500);
+    // eslint-disable-next-line no-console
+    console.error('No JSON offer reference found in the provided activity', {
+      activityId,
+      activityType,
+      payloadSnippet,
+    });
+
+    throw new Error('No JSON offer reference found in the provided activity');
+  }
+
+  const offers = await Promise.all(
+    offerReferences.map((reference) => getOfferDetails(reference.id, reference.type)),
+  );
+
+  return {
+    activityDetails,
+    offers: offers.map((offerDetails, index) => ({
+      activityId,
+      activityType: normalizeString(activityType),
+      offerId: offerReferences[index].id,
+      offerType: offerReferences[index].type,
+      offer: offerDetails,
+    })),
+  };
+}
+
 async function getTravaTelasOffers() {
   const { activities = [] } = await getActivities();
 
@@ -212,20 +246,31 @@ async function getTravaTelasOffers() {
     normalizeString(activity?.state) === 'approved'
   ));
 
-  const offers = await Promise.all(
+  const offersByActivity = await Promise.all(
     approvedActivities.map(async (activity) => {
-      const offerPayload = await getJsonOfferFromActivity(activity.id, activity.type);
-      return {
+      const { activityDetails, offers: activityOffers } = await getJsonOffersFromActivity(
+        activity.id,
+        activity.type,
+      );
+
+      const hasLifetimeEnd = Boolean(
+        activityDetails?.lifetime?.end || activityDetails?.lifetime?.endDate,
+      );
+      if (hasLifetimeEnd) {
+        return [];
+      }
+
+      return activityOffers.map((offerPayload) => ({
         activityId: activity.id,
         activityName: activity.name,
         activityType: normalizeString(activity.type),
         status: activity.state,
         offer: offerPayload.offer,
-      };
+      }));
     }),
   );
 
-  return offers;
+  return offersByActivity.flat();
 }
 
 module.exports = {
@@ -234,6 +279,8 @@ module.exports = {
   getActivityDetails,
   getOfferDetails,
   findJsonOfferReference,
+  findJsonOfferReferences,
   getJsonOfferFromActivity,
+  getJsonOffersFromActivity,
   getTravaTelasOffers,
 };
