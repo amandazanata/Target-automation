@@ -55,232 +55,240 @@ async function fetchAccessToken() {
 
 const normalizeString = (value = '') => value.toString().toLowerCase();
 
-const findJsonOfferReferences = (payload, activityId) => {
-  const visited = new Set();
-  const references = new Map();
+// --- FUNÇÕES AUXILIARES DE ESTRUTURAÇÃO ---
 
-  const normalizedActivityId = normalizeString(activityId);
+const getAudienceDetails = (audienceIds = [], audienceList = []) => {
+  if (!audienceIds || audienceIds.length === 0) {
+    return { name: 'ALL VISITORS', id: null };
+  }
+  const audienceOverview = audienceList.find((audience) => audience.id === audienceIds[0]);
+  const name = audienceOverview
+    ? audienceOverview.name || audienceOverview.type
+    : 'AUDIENCE NOT FOUND';
 
-  const search = (node) => {
-    if (!node || visited.has(node)) {
-      return;
-    }
-
-    visited.add(node);
-
-    if (Array.isArray(node)) {
-      // eslint-disable-next-line no-restricted-syntax
-      for (const item of node) {
-        search(item);
-      }
-      return;
-    }
-
-    if (typeof node === 'object') {
-      const offerId = node.offerId || node.id;
-      const normalizedOfferId = normalizeString(offerId);
-      const offerType = normalizeString(node.offerType || node.type) || 'json';
-
-      const isActivityId = normalizedOfferId && normalizedOfferId === normalizedActivityId;
-
-      if (offerId && !isActivityId) {
-        const existing = references.get(offerId);
-
-        if (!existing || (existing.type !== 'json' && offerType === 'json')) {
-          references.set(offerId, { id: offerId, type: offerType });
-        }
-      }
-
-      // eslint-disable-next-line no-restricted-syntax
-      for (const value of Object.values(node)) {
-        search(value);
-      }
-    }
-  };
-
-  search(payload);
-
-  return Array.from(references.values());
+  return { name, id: audienceIds[0] };
 };
 
-const findJsonOfferReference = (payload, activityId) => (
-  findJsonOfferReferences(payload, activityId)[0] || null
-);
+const buildCompleteActivity = (activityDetails, activityOverview, audienceList = []) => {
+  const {
+    experiences = [],
+    locations,
+    options = [],
+    priority,
+  } = activityDetails;
+
+  // 1. Vincular Experiências às suas Locations (Mbox)
+  const experiencesWithLocations = experiences.map((experience, index) => {
+    const mbox = experience.optionLocations && experience.optionLocations.length > 0
+      ? locations.mboxes.find(
+        (loc) => loc.locationLocalId === experience.optionLocations[0].locationLocalId,
+      )
+      : null;
+
+    return {
+      ...experience,
+      position: index + 1,
+      mbox,
+    };
+  });
+
+  // 2. Vincular Opções (que contêm o offerId) às Experiências
+  const enrichedOptions = options.reduce((acc, option) => {
+    const correspondingExperience = experiencesWithLocations.find((experience) => (
+      experience.optionLocations && experience.optionLocations.some(
+        (ol) => ol.optionLocalId === option.optionLocalId,
+      )
+    ));
+
+    if (correspondingExperience) {
+      let audienceIds;
+      if (activityOverview.type === 'ab') {
+        if (correspondingExperience.mbox) {
+          audienceIds = correspondingExperience.mbox.audienceIds;
+        } else {
+          audienceIds = [];
+        }
+      } else {
+        audienceIds = correspondingExperience.audienceIds;
+      }
+
+      acc.push({
+        ...option,
+        audienceDetails: getAudienceDetails(audienceIds, audienceList),
+        ordination: {
+          priority,
+          position: correspondingExperience.position,
+        },
+        experience: {
+          experienceLocalId: correspondingExperience.experienceLocalId,
+          name: correspondingExperience.name,
+          audienceIds: correspondingExperience.audienceIds,
+          mbox: correspondingExperience.mbox,
+        },
+      });
+    }
+    return acc;
+  }, []);
+
+  // Remove metadados pesados que não precisamos mais
+  const activityCopy = { ...activityDetails };
+  delete activityCopy.locations;
+  delete activityCopy.experiences;
+
+  return {
+    ...activityCopy,
+    type: activityOverview.type,
+    options: enrichedOptions.sort((a, b) => a.ordination.position - b.ordination.position),
+  };
+};
+
+// --- CHAMADAS DE API ---
 
 async function getActivities(params = {}) {
   const accessToken = await fetchAccessToken();
-
   try {
     const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/activities`, {
       headers: buildAuthHeaders(accessToken),
       params,
     });
-
     return data;
   } catch (error) {
-    const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target activities: ${JSON.stringify(details)}`);
+    throw new Error(`Failed to fetch activities: ${error.message}`);
   }
 }
 
 async function getActivityDetails(activityId, activityType) {
-  if (!activityId) {
-    throw new Error('An activity id is required to fetch its details');
-  }
-
-  const normalizedType = normalizeString(activityType);
-  if (!['ab', 'xt'].includes(normalizedType)) {
-    throw new Error('Activity type must be either "ab" or "xt"');
-  }
-
   const accessToken = await fetchAccessToken();
-
+  const normalizedType = normalizeString(activityType);
   try {
     const { data } = await axios.get(
       `${TARGET_API_BASE_URL}/${tenantId}/target/activities/${normalizedType}/${activityId}`,
-      {
-        headers: buildAuthHeaders(accessToken),
-      },
+      { headers: buildAuthHeaders(accessToken) },
     );
-
     return data;
   } catch (error) {
-    const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target activity details: ${JSON.stringify(details)}`);
+    console.error(`Error fetching details for activity ${activityId}: ${error.message}`);
+    return null; // Retorna null para tratar erros graciosamente
+  }
+}
+
+async function getAudiences() {
+  const accessToken = await fetchAccessToken();
+  try {
+    const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/audiences`, {
+      headers: buildAuthHeaders(accessToken),
+    });
+    return data;
+  } catch (error) {
+    console.warn('Failed to fetch audiences, continuing without audience names.');
+    return { audiences: [] };
+  }
+}
+
+async function getOffers() {
+  const accessToken = await fetchAccessToken();
+  try {
+    const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/offers`, {
+      headers: buildAuthHeaders(accessToken),
+    });
+    return data;
+  } catch (error) {
+    console.warn('Failed to fetch offers list, defaulting to standard lookup.');
+    return { offers: [] };
   }
 }
 
 async function getOfferDetails(offerId, offerType) {
   const accessToken = await fetchAccessToken();
-
   try {
     const { data } = await axios.get(
       `${TARGET_API_BASE_URL}/${tenantId}/target/offers/${offerType}/${offerId}`,
-      {
-        headers: buildAuthHeaders(accessToken),
-      },
+      { headers: buildAuthHeaders(accessToken) },
     );
-
     return data;
   } catch (error) {
-    const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target offer details: ${JSON.stringify(details)}`);
+    console.error(`Error fetching offer ${offerId}: ${error.message}`);
+    return { id: offerId, content: null, error: error.message };
   }
 }
 
-async function getJsonOfferFromActivity(activityId, activityType) {
-  const activityDetails = await getActivityDetails(activityId, activityType);
-  const [offerReference] = findJsonOfferReferences(activityDetails, activityId);
+async function buildOffersContent(activity, listOffers) {
+  const promises = activity.options.map(async (option) => {
+    // Tenta achar na lista geral para saber o tipo correto (html, json, redirect, etc)
+    const offerMeta = listOffers.find((o) => o.id === option.offerId);
+    // Se não achar, assume 'content' ou o tipo que já estiver na option, fallback para 'json'
+    const type = offerMeta ? offerMeta.type : (option.type || 'json');
 
-  if (!offerReference) {
-    const payloadSnippet = JSON.stringify(activityDetails)?.slice(0, 500);
-    // eslint-disable-next-line no-console
-    console.error('No JSON offer reference found in the provided activity', {
-      activityId,
-      activityType,
-      payloadSnippet,
-    });
+    // Busca o conteúdo real da oferta
+    const details = await getOfferDetails(option.offerId, type);
 
-    throw new Error('No JSON offer reference found in the provided activity');
-  }
+    return {
+      activityId: activity.id,
+      activityName: activity.name,
+      activityType: normalizeString(activity.type),
+      status: activity.state,
+      offerId: option.offerId,
+      offerType: type,
+      offer: details, // O conteúdo completo da oferta
+      experienceName: option.experience ? option.experience.name : 'Unknown',
+      audience: option.audienceDetails ? option.audienceDetails.name : 'All Visitors',
+    };
+  });
 
-  const offerDetails = await getOfferDetails(offerReference.id, offerReference.type);
-
-  return {
-    activityId,
-    activityType: normalizeString(activityType),
-    offerId: offerReference.id,
-    offerType: offerReference.type,
-    offer: offerDetails,
-  };
-}
-
-async function getJsonOffersFromActivity(activityId, activityType) {
-  const activityDetails = await getActivityDetails(activityId, activityType);
-  const hasLifetimeEnd = Boolean(
-    activityDetails?.lifetime?.end || activityDetails?.lifetime?.endDate,
-  );
-
-  if (hasLifetimeEnd) {
-    return { activityDetails, offers: [] };
-  }
-
-  const offerReferences = findJsonOfferReferences(activityDetails, activityId);
-
-  if (!offerReferences.length) {
-    const payloadSnippet = JSON.stringify(activityDetails)?.slice(0, 500);
-    // eslint-disable-next-line no-console
-    console.error('No JSON offer reference found in the provided activity', {
-      activityId,
-      activityType,
-      payloadSnippet,
-    });
-
-    throw new Error('No JSON offer reference found in the provided activity');
-  }
-
-  const offers = await Promise.all(
-    offerReferences.map((reference) => getOfferDetails(reference.id, reference.type)),
-  );
-
-  return {
-    activityDetails,
-    offers: offers.map((offerDetails, index) => ({
-      activityId,
-      activityType: normalizeString(activityType),
-      offerId: offerReferences[index].id,
-      offerType: offerReferences[index].type,
-      offer: offerDetails,
-    })),
-  };
+  return Promise.all(promises);
 }
 
 async function getTravaTelasOffers() {
-  const { activities = [] } = await getActivities();
+  // 1. Buscar listas base em paralelo
+  const [activitiesData, audiencesData, offersData] = await Promise.all([
+    getActivities(),
+    getAudiences(),
+    getOffers(),
+  ]);
 
-  const matchingActivities = activities.filter((activity) => (
+  const activities = activitiesData.activities || [];
+  const audienceList = audiencesData.audiences || [];
+  const offerList = offersData.offers || [];
+
+  // 2. Filtrar Atividades (Nome e Status)
+  const approvedActivities = activities.filter((activity) => (
     activity?.name?.includes(TRAVA_TELAS_IDENTIFIER)
+    && normalizeString(activity?.state) === 'approved'
   ));
 
-  const approvedActivities = matchingActivities.filter((activity) => (
-    normalizeString(activity?.state) === 'approved'
-  ));
+  // 3. Processar cada atividade
+  const results = await Promise.all(
+    approvedActivities.map(async (activityOverview) => {
+      // Filtro de Lifetime (Atividades "Evergreen" / Sem data de fim)
+      // Verificamos primeiro no overview para economizar chamadas
+      const hasLifetimeEndInOverview = activityOverview.lifetime && activityOverview.lifetime.end;
+      if (hasLifetimeEndInOverview) return [];
 
-  const offersByActivity = await Promise.all(
-    approvedActivities.map(async (activity) => {
-      const { activityDetails, offers: activityOffers } = await getJsonOffersFromActivity(
-        activity.id,
-        activity.type,
+      // Busca detalhes completos
+      const activityDetails = await getActivityDetails(activityOverview.id, activityOverview.type);
+      if (!activityDetails) return [];
+
+      // Verificação dupla de lifetime nos detalhes (caso a lista esteja desatualizada/incompleta)
+      const hasLifetimeEndInDetails = activityDetails.lifetime && activityDetails.lifetime.end;
+      if (hasLifetimeEndInDetails) return [];
+
+      // Estrutura a atividade relacionando Exp -> Option
+      const structuredActivity = buildCompleteActivity(
+        activityDetails,
+        activityOverview,
+        audienceList,
       );
 
-      const hasLifetimeEnd = Boolean(
-        activityDetails?.lifetime?.end || activityDetails?.lifetime?.endDate,
-      );
-      if (hasLifetimeEnd) {
-        return [];
-      }
-
-      return activityOffers.map((offerPayload) => ({
-        activityId: activity.id,
-        activityName: activity.name,
-        activityType: normalizeString(activity.type),
-        status: activity.state,
-        offer: offerPayload.offer,
-      }));
+      // Busca o conteúdo das ofertas encontradas
+      const activityOffers = await buildOffersContent(structuredActivity, offerList);
+      return activityOffers;
     }),
   );
 
-  return offersByActivity.flat();
+  // Flatten para retornar uma lista única de ofertas
+  return results.flat();
 }
 
 module.exports = {
-  fetchAccessToken,
-  getActivities,
-  getActivityDetails,
-  getOfferDetails,
-  findJsonOfferReference,
-  findJsonOfferReferences,
-  getJsonOfferFromActivity,
-  getJsonOffersFromActivity,
   getTravaTelasOffers,
 };
