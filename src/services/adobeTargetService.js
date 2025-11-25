@@ -55,16 +55,9 @@ async function fetchAccessToken() {
 
 const normalizeString = (value = '') => value.toString().toLowerCase();
 
-const getSchedulingAccordingToInterface = (activity) => {
-  /* status da API: approved|deactivated|paused|saved|deleted
-  status da interface: live|scheduled|ended|archived|inactive|draft|syncing
+// --- HELPER FUNCTIONS
 
-  mapeados:
-    approved = live|scheduled|ended
-    deactivated = archived
-    saved = inactive
-  */
-
+function getSchedulingAccordingToInterface(activity) {
   let scheduling = '';
   const start = activity?.startsAt || activity.lifetime?.start;
   const end = activity?.endsAt || activity.lifetime?.end;
@@ -79,8 +72,8 @@ const getSchedulingAccordingToInterface = (activity) => {
   const isTodayBeforeEnd = endsDate && today <= endsDate;
   const isTodayAfterEnd = endsDate && today > endsDate;
 
-  const isLive = isStartDateMissing
-    || (isTodayAfterStart && (isEndDateMissing || isTodayBeforeEnd));
+  const isLive = isStartDateMissing || (isTodayAfterStart
+    && (isEndDateMissing || isTodayBeforeEnd));
 
   if (isLive) {
     scheduling = 'live';
@@ -91,67 +84,56 @@ const getSchedulingAccordingToInterface = (activity) => {
   }
 
   return [scheduling, start, end];
-};
+}
 
-const getAudienceDetails = (audienceIds = [], audienceList = []) => {
-  if (audienceIds.length === 0) {
-    return { name: 'ALL VISITORS', id: null };
+function getAudienceDetails(audienceIds, audienceList) {
+  let name = '';
+
+  if (!audienceIds || audienceIds.length === 0) {
+    name = 'ALL VISITORS';
+    return { name, id: null };
   }
 
   const audienceOverview = audienceList.find((audience) => audience.id === audienceIds[0]);
-  const name = audienceOverview
-    ? audienceOverview.name || audienceOverview.type
-    : 'AUDIENCE NOT FOUND';
+  name = audienceOverview ? audienceOverview.name || audienceOverview.type : 'AUDIENCE NOT FOUND';
 
   return { name, id: audienceIds[0] };
-};
+}
 
-const buildCompleteActivity = (activityDetails, activityOverview, audienceList = []) => {
-  /* Os dados da API de UMA atividade são organizados de maneira a representar informações
-  sobre experiences, locations e options associadas a cada experiência.
-
-  O relacionamento entre esses dados ocorre da seguinte forma:
-  - experiences: Cada objeto experience contém um identificador único e uma lista de options
-    associadas. A chave que faz essa ligação é o optionLocalId.
-  - locations: Cada objeto location contém um identificador único que é utilizado para associar
-    a location com as experiências. A chave que faz essa ligação é o locationLocalId.
-  - options: Cada objeto option está associada a uma experiência através do optionLocalId.
-  */
-
+function buildCompleteActivity(activityDetails, activityOverview, audienceList) {
+  let positionCounter = 0;
   const {
-    experiences,
-    locations,
-    options,
-    priority,
+    experiences, locations, options, priority,
   } = activityDetails;
 
-  const experiencesWithLocations = experiences.map((experience, index) => {
-    const [mbox] = experience.optionLocations.map((ol) => (
-      locations.mboxes.find(
-        (locationMbox) => locationMbox.locationLocalId === ol.locationLocalId,
-      )
-    ));
+  // 1. Mesclar experiences com suas respectivas locations com base no locationLocalId
+  const experiencesWithLocations = experiences.map((experience) => {
+    positionCounter += 1;
+    const enrichedExperience = { ...experience, position: positionCounter };
 
-    return {
-      ...experience,
-      position: index + 1,
-      mbox,
-    };
+    const matchedMbox = experience.optionLocations.map((ol) => locations.mboxes.find(
+      (mbox) => mbox.locationLocalId === ol.locationLocalId,
+    )).find((m) => m); // Pega o primeiro encontrado
+
+    enrichedExperience.mbox = matchedMbox;
+
+    return enrichedExperience;
   });
 
+  // 2. Mesclar options com experiences com base no optionLocalId
   const enrichedOptions = options.map((option) => {
-    const correspondingExperience = experiencesWithLocations
-      .find((experience) => experience.optionLocations
-        .some((ol) => ol.optionLocalId === option.optionLocalId));
+    const correspondingExperience = experiencesWithLocations.find((experience) => experience
+      .optionLocations.some((ol) => ol.optionLocalId === option.optionLocalId));
 
     if (correspondingExperience) {
+      // Determina IDs de audiência baseado no tipo da atividade (AB vs XT)
       const audienceIds = activityOverview.type === 'ab'
-        ? correspondingExperience.mbox.audienceIds
+        ? correspondingExperience.mbox?.audienceIds
         : correspondingExperience.audienceIds;
 
       return {
         ...option,
-        audienceDetails: getAudienceDetails(audienceIds, audienceList),
+        audienceDetails: getAudienceDetails(audienceIds || [], audienceList),
         ordination: {
           priority,
           position: correspondingExperience.position,
@@ -162,213 +144,156 @@ const buildCompleteActivity = (activityDetails, activityOverview, audienceList =
           audienceIds: correspondingExperience.audienceIds,
           mbox: correspondingExperience.mbox,
         },
-        visitorPercentage: correspondingExperience?.visitorPercentage
-          ? correspondingExperience.visitorPercentage
-          : 'N/A',
+        visitorPercentage: correspondingExperience.visitorPercentage
+          ? correspondingExperience.visitorPercentage : 'N/A',
       };
     }
     return option;
   });
 
-  const normalizedDetails = {
-    ...activityDetails,
-    startsAt:
-      activityDetails.startsAt || activityOverview.startsAt || 'when activated',
-    endsAt: activityDetails.endsAt || activityOverview.endsAt || 'when deactivated',
-  };
+  // Limpeza e normalização de datas
+  const activityCopy = { ...activityDetails };
+  delete activityCopy.locations;
+  delete activityCopy.experiences;
 
-  const {
-    locations: _locations,
-    experiences: _experiences,
-    ...activityWithoutLinks
-  } = normalizedDetails;
-  const [scheduling, startsAt, endsAt] = getSchedulingAccordingToInterface(activityWithoutLinks);
+  if (!activityCopy.startsAt) activityCopy.startsAt = activityOverview.startsAt || 'when activated';
+  if (!activityCopy.endsAt) activityCopy.endsAt = activityOverview.endsAt || 'when deactivated';
+
+  const [scheduling] = getSchedulingAccordingToInterface(activityCopy);
 
   return {
-    ...activityWithoutLinks,
+    ...activityCopy,
     type: activityOverview.type,
-    scheduling,
-    startsAt,
-    endsAt,
+    scheduling, // live, scheduled, expired
     options: enrichedOptions.sort((a, b) => a.ordination.position - b.ordination.position),
   };
-};
+}
 
-const findJsonOfferReferences = (payload, activityId) => {
-  const visited = new WeakSet();
-  const matches = [];
-  const seenIds = new Set();
-
-  const normalizedActivityId = normalizeString(activityId);
-
-  const search = (node) => {
-    if (!node || typeof node !== 'object') return;
-    if (visited.has(node)) return;
-    visited.add(node);
-
-    if (Array.isArray(node)) {
-      node.forEach(search);
-      return;
-    }
-
-    if (typeof node === 'object') {
-      const offerId = node.offerId || node.id;
-      const offerType = normalizeString(node.offerType || node.type);
-      const normalizedOfferId = normalizeString(offerId);
-
-      const isActivityId = normalizedOfferId && normalizedOfferId === normalizedActivityId;
-
-      if (offerId && !isActivityId) {
-        const isValidType = offerType === 'json' || offerType === 'content';
-        const isMissingType = !offerType;
-
-        if ((isValidType || isMissingType) && !seenIds.has(normalizedOfferId)) {
-          seenIds.add(normalizedOfferId);
-          matches.push({ id: offerId, type: 'json' });
-        }
-      }
-
-      Object.values(node).forEach(search);
-    }
-  };
-
-  search(payload);
-  return matches;
-};
+// --- API REQUEST FUNCTIONS ---
 
 async function getActivities(params = {}) {
   const accessToken = await fetchAccessToken();
-
   try {
     const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/activities`, {
       headers: buildAuthHeaders(accessToken),
       params,
     });
-
     return data;
   } catch (error) {
     const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target activities: ${JSON.stringify(details)}`);
+    throw new Error(`Failed to fetch activities: ${JSON.stringify(details)}`);
   }
 }
 
 async function getActivityDetails(activityId, activityType) {
-  if (!activityId) {
-    throw new Error('An activity id is required to fetch its details');
-  }
-
+  if (!activityId) throw new Error('Activity ID is required');
   const normalizedType = normalizeString(activityType);
-  if (!['ab', 'xt'].includes(normalizedType)) {
-    throw new Error('Activity type must be either "ab" or "xt"');
-  }
-
   const accessToken = await fetchAccessToken();
 
   try {
     const { data } = await axios.get(
       `${TARGET_API_BASE_URL}/${tenantId}/target/activities/${normalizedType}/${activityId}`,
-      {
-        headers: buildAuthHeaders(accessToken),
-      },
+      { headers: buildAuthHeaders(accessToken) },
     );
-
     return data;
   } catch (error) {
     const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target activity details: ${JSON.stringify(details)}`);
+    throw new Error(`Failed to fetch activity details: ${JSON.stringify(details)}`);
   }
 }
 
-async function getAudiences(params = {}) {
+async function getAudiences() {
   const accessToken = await fetchAccessToken();
-
   try {
     const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/audiences`, {
       headers: buildAuthHeaders(accessToken),
-      params,
     });
-
     return data;
   } catch (error) {
     const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target audiences: ${JSON.stringify(details)}`);
+    throw new Error(`Failed to fetch audiences: ${JSON.stringify(details)}`);
   }
 }
 
-async function getOffers(params = {}) {
+async function getOffers() {
   const accessToken = await fetchAccessToken();
-
   try {
     const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/offers`, {
       headers: buildAuthHeaders(accessToken),
-      params,
     });
-
     return data;
   } catch (error) {
     const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target offers: ${JSON.stringify(details)}`);
+    throw new Error(`Failed to fetch offers: ${JSON.stringify(details)}`);
   }
 }
 
 async function getOfferDetails(offerId, offerType) {
   const accessToken = await fetchAccessToken();
-
   try {
     const { data } = await axios.get(
       `${TARGET_API_BASE_URL}/${tenantId}/target/offers/${offerType}/${offerId}`,
-      {
-        headers: buildAuthHeaders(accessToken),
-      },
+      { headers: buildAuthHeaders(accessToken) },
     );
-
     return data;
   } catch (error) {
     const details = error.response?.data || error.message;
-    throw new Error(`Failed to fetch Adobe Target offer details: ${JSON.stringify(details)}`);
+    throw new Error(`Failed to fetch offer details: ${JSON.stringify(details)}`);
   }
 }
 
-const buildOffersPromises = (activity, listOffers = []) => activity.options.map(async (option) => {
-  const offer = listOffers.find((item) => item.id === option.offerId) || {};
-  const offerType = offer.type || option.type || 'json';
-  const offerDetails = await getOfferDetails(option.offerId, offerType);
+// --- ORCHESTRATION LOGIC ---
 
-  const {
-    scheduling,
-    startsAt,
-    endsAt,
-    type: activityType,
-  } = activity;
-  const optionMeta = {
-    scheduling: { status: scheduling, startsAt, endsAt },
-    type: { activity: activityType, offer: offerType },
-  };
+function buildOffersPromises(activity, listOffers) {
+  const offersPromises = activity.options.map(async (option) => {
+    // Busca metadados da oferta na lista geral para saber o tipo (html, json, etc)
+    const offerOverview = listOffers.find((o) => o.id === option.offerId);
+    // Se não achar na lista, tenta inferir ou usa padrão (ex: content)
+    const type = offerOverview ? offerOverview.type : (option.type || 'content');
 
-  const { id, content } = offerDetails;
+    // Busca o conteúdo completo da oferta
+    const offerDetails = await getOfferDetails(option.offerId, type);
 
-  return { ...option, ...optionMeta, offerDetails: { id, content } };
-});
+    const { scheduling, startsAt, endsAt } = activity;
+    const meta = {
+      scheduling: { status: scheduling, startsAt, endsAt },
+      type: { activity: activity.type, offer: type },
+    };
 
-async function getActivityWithOffers(activityOverview, audienceList = [], offerList = []) {
+    const { id, content } = offerDetails;
+    return { ...option, ...meta, offerDetails: { id, content } };
+  });
+
+  return offersPromises;
+}
+
+async function getActivityWithOffers(activityOverview, audienceList, offerList) {
+  // 1. Busca detalhes da atividade
   const activityDetails = await getActivityDetails(activityOverview.id, activityOverview.type);
-  const completeActivity = buildCompleteActivity(activityDetails, activityOverview, audienceList);
-  const offersDetails = await Promise.all(buildOffersPromises(completeActivity, offerList));
 
-  return { ...completeActivity, options: offersDetails };
+  // 2. Estrutura a atividade (vincula experiences -> options)
+  const completeActivity = buildCompleteActivity(activityDetails, activityOverview, audienceList);
+
+  // 3. Busca o conteúdo das ofertas para cada opção estruturada
+  const offersPromises = buildOffersPromises(completeActivity, offerList);
+  const offersResponses = await Promise.all(offersPromises);
+
+  return { ...completeActivity, options: offersResponses };
 }
 
 async function getTravaTelasOffers() {
-  const [activitiesResponse, audiencesResponse, offersResponse] = await Promise.all([
+  // 1. Busca dados iniciais em paralelo (Atividades, Audiências, Ofertas)
+  const [activitiesData, audiencesData, offersData] = await Promise.all([
     getActivities(),
     getAudiences(),
     getOffers(),
   ]);
 
-  const activities = activitiesResponse.activities || [];
-  const audienceList = audiencesResponse.audiences || [];
-  const offerList = offersResponse.offers || [];
+  const activities = activitiesData.activities || [];
+  const audienceList = audiencesData.audiences || [];
+  const offerList = offersData.offers || [];
 
+  // 2. Filtros iniciais (Nome, Status, Lifetime)
   const matchingActivities = activities.filter((activity) => (
     activity?.name?.includes(TRAVA_TELAS_IDENTIFIER)
   ));
@@ -381,19 +306,19 @@ async function getTravaTelasOffers() {
     (activity) => !activity.lifetime || !activity.lifetime.end,
   );
 
+  // 3. Processamento detalhado para cada atividade encontrada
   const results = await Promise.all(
     activeActivities.map(async (activity) => {
       try {
-        const activityWithOffers = await getActivityWithOffers(activity, audienceList, offerList);
-        return activityWithOffers;
+        return await getActivityWithOffers(activity, audienceList, offerList);
       } catch (error) {
-        console.error(`Erro ao buscar ofertas para atividade ${activity.id}:`, error.message);
+        console.error(`Erro ao processar atividade ${activity.id}:`, error.message);
         return null;
       }
     }),
   );
 
-  return results.filter((result) => result !== null);
+  return results.filter((r) => r !== null);
 }
 
 module.exports = {
@@ -401,9 +326,5 @@ module.exports = {
   getActivities,
   getActivityDetails,
   getOfferDetails,
-  getAudiences,
-  getOffers,
-  findJsonOfferReference: findJsonOfferReferences,
-  findJsonOfferReferences,
   getTravaTelasOffers,
 };
