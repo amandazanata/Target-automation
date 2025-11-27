@@ -41,9 +41,12 @@ router.get('/automation/trava-telas/export', async (req, res) => {
 
 router.put('/automation/trava-telas/update-date', async (req, res) => {
   try {
-    const result = await adobeTargetService.updateTravaTelasOffersDate();
+    const { activityId } = req.query;
+    const result = await adobeTargetService.updateTravaTelasOffersDate(activityId || null);
     return res.json({
-      message: 'Offers updated successfully',
+      message: activityId
+        ? `Test run for Activity ID: ${activityId}`
+        : 'Offers updated successfully',
       ...result,
     });
   } catch (error) {

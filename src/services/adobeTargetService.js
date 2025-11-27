@@ -255,7 +255,7 @@ async function buildOffersContent(activity, listOffers) {
   return Promise.all(promises);
 }
 
-async function getTravaTelasOffers() {
+async function getTravaTelasOffers(targetActivityId = null) {
   // 1. Buscar listas base em paralelo
   const [activitiesData, audiencesData, offersData] = await Promise.all([
     getActivities(),
@@ -268,10 +268,16 @@ async function getTravaTelasOffers() {
   const offerList = offersData.offers || [];
 
   // 2. Filtrar Atividades (Nome e Status)
-  const approvedActivities = activities.filter((activity) => (
-    activity?.name?.includes(TRAVA_TELAS_IDENTIFIER)
-    && normalizeString(activity?.state) === 'approved'
-  ));
+  const approvedActivities = activities.filter((activity) => {
+    if (targetActivityId) {
+      return activity?.id?.toString() === targetActivityId.toString();
+    }
+
+    return (
+      activity?.name?.includes(TRAVA_TELAS_IDENTIFIER)
+      && normalizeString(activity?.state) === 'approved'
+    );
+  });
 
   // 3. Processar cada atividade
   const results = await Promise.all(
@@ -306,14 +312,14 @@ async function getTravaTelasOffers() {
   return results.flat();
 }
 
-async function updateTravaTelasOffersDate() {
+async function updateTravaTelasOffersDate(targetActivityId = null) {
   const today = new Date();
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
   const formattedDate = `${yyyy}${mm}${dd}`;
 
-  const offers = await getTravaTelasOffers();
+  const offers = await getTravaTelasOffers(targetActivityId);
 
   const updatePromises = offers.map(async (offerData) => {
     const { offerId, offerType, offer } = offerData;
