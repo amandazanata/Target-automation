@@ -212,6 +212,23 @@ async function getOfferDetails(offerId, offerType) {
   }
 }
 
+async function updateOfferContent(offerId, offerType, content) {
+  const accessToken = await fetchAccessToken();
+
+  try {
+    const { data } = await axios.put(
+      `${TARGET_API_BASE_URL}/${tenantId}/target/offers/${offerType}/${offerId}`,
+      { content },
+      { headers: buildAuthHeaders(accessToken) },
+    );
+
+    return data;
+  } catch (error) {
+    console.error(`Error updating offer ${offerId}: ${error.message}`);
+    throw new Error(`Failed to update offer ${offerId}: ${error.message}`);
+  }
+}
+
 async function buildOffersContent(activity, listOffers) {
   const promises = activity.options.map(async (option) => {
     // Tenta achar na lista geral para saber o tipo correto (html, json, redirect, etc)
@@ -289,6 +306,52 @@ async function getTravaTelasOffers() {
   return results.flat();
 }
 
+async function updateTravaTelasOffersDate() {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const formattedDate = `${yyyy}${mm}${dd}`;
+
+  const offers = await getTravaTelasOffers();
+
+  const updatePromises = offers.map(async (offerData) => {
+    const { offerId, offerType, offer } = offerData;
+    let { content } = offer;
+
+    if (!content) return false;
+
+    if (typeof content === 'string') {
+      try {
+        content = JSON.parse(content);
+      } catch (error) {
+        console.warn(`Failed to parse content for offer ${offerId}: ${error.message}`);
+        return false;
+      }
+    }
+
+    const payload = content.payload || {};
+    if (!payload.nomeOferta) return false;
+
+    const currentName = payload.nomeOferta.toString();
+    const baseName = currentName.replace(/-\d{8}$/, '');
+    const updatedName = `${baseName}-${formattedDate}`;
+
+    if (updatedName === currentName) return false;
+
+    const updatedContent = { ...content, payload: { ...payload, nomeOferta: updatedName } };
+
+    await updateOfferContent(offerId, offerType, updatedContent);
+    return true;
+  });
+
+  const results = await Promise.all(updatePromises);
+  const updatedCount = results.filter(Boolean).length;
+
+  return { updatedCount, totalOffers: offers.length, date: formattedDate };
+}
+
 module.exports = {
   getTravaTelasOffers,
+  updateTravaTelasOffersDate,
 };

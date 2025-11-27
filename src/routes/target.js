@@ -39,4 +39,19 @@ router.get('/automation/trava-telas/export', async (req, res) => {
   }
 });
 
+router.put('/automation/trava-telas/update-date', async (req, res) => {
+  try {
+    const result = await adobeTargetService.updateTravaTelasOffersDate();
+    return res.json({
+      message: 'Offers updated successfully',
+      ...result,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Unable to update Trava Telas offers date',
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;
