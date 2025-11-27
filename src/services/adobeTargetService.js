@@ -17,6 +17,7 @@ let cachedToken;
 const buildAuthHeaders = (accessToken) => ({
   Authorization: `Bearer ${accessToken}`,
   'x-api-key': apiKey,
+  'Content-Type': 'application/vnd.adobe.target.v2+json',
   Accept: 'application/vnd.adobe.target.v2+json',
 });
 
@@ -214,11 +215,12 @@ async function getOfferDetails(offerId, offerType) {
 
 async function updateOfferContent(offerId, offerType, content) {
   const accessToken = await fetchAccessToken();
+  const contentToSend = typeof content === 'object' ? JSON.stringify(content) : content;
 
   try {
     const { data } = await axios.put(
       `${TARGET_API_BASE_URL}/${tenantId}/target/offers/${offerType}/${offerId}`,
-      { content },
+      { content: contentToSend },
       { headers: buildAuthHeaders(accessToken) },
     );
 
