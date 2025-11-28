@@ -236,6 +236,24 @@ async function updateOfferContent(offerId, offerType, content, workspace = null)
   }
 }
 
+async function updateActivity(activityId, activityType, activityPayload) {
+  const accessToken = await fetchAccessToken();
+  const normalizedType = normalizeString(activityType);
+
+  try {
+    const { data } = await axios.put(
+      `${TARGET_API_BASE_URL}/${tenantId}/target/activities/${normalizedType}/${activityId}`,
+      activityPayload,
+      { headers: buildAuthHeaders(accessToken) },
+    );
+
+    return data;
+  } catch (error) {
+    console.error(`Error updating activity ${activityId}: ${error.message}`);
+    throw new Error(`Failed to update activity ${activityId}: ${error.message}`);
+  }
+}
+
 async function buildOffersContent(activity, listOffers) {
   const promises = activity.options.map(async (option) => {
     // Tenta achar na lista geral para saber o tipo correto (html, json, redirect, etc)
@@ -327,45 +345,71 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
   const formattedDate = `${yyyy}${mm}${dd}`;
 
   const offers = await getTravaTelasOffers(targetActivityId);
+  const uniqueActivities = new Map();
 
-  const updatePromises = offers.map(async (offerData) => {
-    const { offerId, offerType, offer } = offerData;
-    const { workspace } = offer;
-    let { content } = offer;
-
-    if (!content) return false;
-
-    if (typeof content === 'string') {
-      try {
-        content = JSON.parse(content);
-      } catch (error) {
-        console.warn(`Failed to parse content for offer ${offerId}: ${error.message}`);
-        return false;
-      }
+  offers.forEach(({ activityId, activityType }) => {
+    const key = `${activityType}-${activityId}`;
+    if (!uniqueActivities.has(key)) {
+      uniqueActivities.set(key, { activityId, activityType });
     }
-
-    const payload = content.payload || {};
-    if (!payload.nomeOferta) return false;
-
-    const currentName = payload.nomeOferta.toString();
-    const baseName = currentName.replace(/-\d{8}$/, '');
-    const updatedName = `${baseName}-${formattedDate}`;
-
-    if (updatedName === currentName) return false;
-
-    const updatedContent = { ...content, payload: { ...payload, nomeOferta: updatedName } };
-
-    await updateOfferContent(offerId, offerType, updatedContent, workspace);
-    return true;
   });
 
-  const results = await Promise.all(updatePromises);
-  const updatedCount = results.filter(Boolean).length;
+  let updatedCount = 0;
+
+  for (const { activityId, activityType } of uniqueActivities.values()) {
+    const activityDetail = await getActivityDetails(activityId, activityType);
+    if (!activityDetail || !Array.isArray(activityDetail.options)) continue;
+
+    let hasChanges = false;
+
+    const updatedOptions = activityDetail.options.map((option) => {
+      if (normalizeString(option.type) !== 'json' || !option.content) return option;
+
+      let parsedContent = option.content;
+      const contentIsString = typeof parsedContent === 'string';
+
+      if (contentIsString) {
+        try {
+          parsedContent = JSON.parse(parsedContent);
+        } catch (error) {
+          console.warn(`Failed to parse content for option ${option.optionLocalId}: ${error.message}`);
+          return option;
+        }
+      }
+
+      const payload = parsedContent.payload || {};
+      if (!payload.nomeOferta) return option;
+
+      const currentName = payload.nomeOferta.toString();
+      const baseName = currentName.replace(/-\d{8}$/, '');
+      const updatedName = `${baseName}-${formattedDate}`;
+
+      if (updatedName === currentName) return option;
+
+      hasChanges = true;
+      updatedCount += 1;
+
+      const updatedContent = { ...parsedContent, payload: { ...payload, nomeOferta: updatedName } };
+      const finalContent = contentIsString ? JSON.stringify(updatedContent) : updatedContent;
+
+      return { ...option, content: finalContent };
+    });
+
+    if (hasChanges) {
+      const activityPayload = { ...activityDetail, options: updatedOptions };
+      delete activityPayload.stateComputed;
+      delete activityPayload.revisions;
+      delete activityPayload.workspace;
+
+      await updateActivity(activityId, activityType, activityPayload);
+    }
+  }
 
   return { updatedCount, totalOffers: offers.length, date: formattedDate };
 }
 
 module.exports = {
+  updateActivity,
   getTravaTelasOffers,
   updateTravaTelasOffersDate,
 };
