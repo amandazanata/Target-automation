@@ -407,12 +407,13 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
     const activityDetail = await getActivityDetails(activityId, activityType);
     if (!activityDetail || !Array.isArray(activityDetail.options)) {
       console.log(`[updateTravaTelasOffersDate] Atividade ${activityId} sem opções válidas, ignorando.`);
-      return { updated: 0 };
+      return { updated: 0, evidence: [] };
     }
 
     const activityOffers = offers.filter((offer) => offer.activityId === activityId);
     let activityNeedsUpdate = false;
     let updatedInActivity = 0;
+    const activityEvidence = [];
 
     const updatedOptions = await Promise.all(activityDetail.options.map(async (option) => {
       const optionType = normalizeString(option.type || 'json');
@@ -439,6 +440,13 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
           await updateOfferContent(option.offerId, offerType, newContent, activityDetail.workspace);
           updatedInActivity += 1;
           activityNeedsUpdate = true;
+          activityEvidence.push({
+            activityId,
+            offerId: option.offerId,
+            type: 'Shared Offer',
+            status: 'Updated',
+            timestamp: new Date().toISOString(),
+          });
         }
 
         console.log(`[updateTravaTelasOffersDate] Oferta compartilhada ${optionIdentifier} verificada. Mudou: ${changed}`);
@@ -455,6 +463,13 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
           console.log(`[updateTravaTelasOffersDate] Conteúdo embutido alterado para ${optionIdentifier || 'sem-id'}.`);
           updatedInActivity += 1;
           activityNeedsUpdate = true;
+          activityEvidence.push({
+            activityId,
+            offerId: option.optionLocalId,
+            type: 'Embedded Offer',
+            status: 'Updated',
+            timestamp: new Date().toISOString(),
+          });
           return { ...option, content: newContent };
         }
 
@@ -476,12 +491,18 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
       console.log(`[updateTravaTelasOffersDate] Nenhuma atualização necessária para atividade ${activityId}.`);
     }
 
-    return { updated: updatedInActivity };
+    return { updated: updatedInActivity, evidence: activityEvidence };
   }));
 
   const updatedCount = activityResults.reduce((total, result) => total + result.updated, 0);
+  const evidence = activityResults.flatMap((result) => result.evidence || []);
 
-  return { updatedCount, totalOffers: offers.length, date: formattedDate };
+  return {
+    updatedCount,
+    totalOffers: offers.length,
+    date: formattedDate,
+    evidence,
+  };
 }
 
 module.exports = {

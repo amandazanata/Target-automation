@@ -214,7 +214,7 @@
     };
 
     document.getElementById('btn-trava-telas').addEventListener('click', () => {
-      handleFetch('/target/automation/trava-telas', {}, 'trava-telas-result', (payload) => {
+      handleFetch('/target/automation/trava-telas/update-date', { method: 'PUT' }, 'trava-telas-result', (payload) => {
         const counter = document.getElementById('trava-telas-counter');
         if (counter) {
           const total = payload?.totalOffers;
