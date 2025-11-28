@@ -382,6 +382,11 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
   const dd = String(today.getDate()).padStart(2, '0');
   const formattedDate = `${yyyy}${mm}${dd}`;
 
+  console.log('[updateTravaTelasOffersDate] Iniciando processo de atualização', {
+    targetActivityId,
+    formattedDate,
+  });
+
   const offers = await getTravaTelasOffers(targetActivityId);
   const uniqueActivities = new Map();
 
@@ -398,26 +403,31 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
     activityId,
     activityType,
   }) => {
+    console.log(`[updateTravaTelasOffersDate] Processando atividade ${activityId} (${activityType})`);
     const activityDetail = await getActivityDetails(activityId, activityType);
     if (!activityDetail || !Array.isArray(activityDetail.options)) {
+      console.log(`[updateTravaTelasOffersDate] Atividade ${activityId} sem opções válidas, ignorando.`);
       return { updated: 0 };
     }
 
-    const activityOffers = offers.filter((offer) => offer.activityId === activityId);
+    const activityOffers = offers.filter((offer) => offer.activityId == activityId);
     let activityNeedsUpdate = false;
     let updatedInActivity = 0;
 
     const updatedOptions = await Promise.all(activityDetail.options.map(async (option) => {
       const optionType = normalizeString(option.type || 'json');
       const hasEmbeddedContent = Boolean(option.content);
+      const optionIdentifier = `${option.offerId || option.optionLocalId}`;
 
       // Cenário A: Shared Offer (possui offerId, porém sem content incorporado)
       if (option.offerId && !hasEmbeddedContent) {
-        const optionOffer = activityOffers.find((offer) => offer.offerId === option.offerId);
+        console.log(`[updateTravaTelasOffersDate] Oferta compartilhada ${optionIdentifier} detectada.`);
+        const optionOffer = activityOffers.find((offer) => offer.offerId == option.offerId);
         const offerType = optionOffer ? optionOffer.offerType : (option.type || 'json');
         let offerContent = optionOffer?.offer?.content || null;
 
         if (!offerContent) {
+          console.log(`[updateTravaTelasOffersDate] Buscando detalhes da oferta ${optionIdentifier}.`);
           const offerDetails = await getOfferDetails(option.offerId, offerType);
           offerContent = offerDetails.content;
         }
@@ -425,35 +435,45 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
         const { newContent, changed } = processContentName(offerContent, formattedDate);
 
         if (changed) {
+          console.log(`[updateTravaTelasOffersDate] Atualizando oferta compartilhada ${optionIdentifier}.`);
           await updateOfferContent(option.offerId, offerType, newContent, activityDetail.workspace);
           updatedInActivity += 1;
           activityNeedsUpdate = true;
         }
+
+        console.log(`[updateTravaTelasOffersDate] Oferta compartilhada ${optionIdentifier} verificada. Mudou: ${changed}`);
 
         return option;
       }
 
       // Cenário B: Embedded Offer (conteúdo dentro da própria option)
       if (hasEmbeddedContent && optionType === 'json') {
+        console.log(`[updateTravaTelasOffersDate] Oferta embutida ${optionIdentifier || 'sem-id'} detectada.`);
         const { newContent, changed } = processContentName(option.content, formattedDate);
 
         if (changed) {
+          console.log(`[updateTravaTelasOffersDate] Conteúdo embutido alterado para ${optionIdentifier || 'sem-id'}.`);
           updatedInActivity += 1;
           activityNeedsUpdate = true;
           return { ...option, content: newContent };
         }
+
+        console.log(`[updateTravaTelasOffersDate] Oferta embutida ${optionIdentifier || 'sem-id'} sem alterações.`);
       }
 
       return option;
     }));
 
     if (activityNeedsUpdate) {
+      console.log(`[updateTravaTelasOffersDate] Atualizando atividade ${activityId} para refletir mudanças.`);
       const activityPayload = { ...activityDetail, options: updatedOptions };
       delete activityPayload.stateComputed;
       delete activityPayload.revisions;
       delete activityPayload.workspace;
 
       await updateActivity(activityId, activityType, activityPayload);
+    } else {
+      console.log(`[updateTravaTelasOffersDate] Nenhuma atualização necessária para atividade ${activityId}.`);
     }
 
     return { updated: updatedInActivity };
