@@ -8,6 +8,8 @@ const {
   apiScope,
 } = require('../config/environment');
 
+axios.defaults.timeout = 10000;
+
 const IMS_TOKEN_URL = 'https://ims-na1.adobelogin.com/ims/token/v3';
 const TARGET_API_BASE_URL = 'https://mc.adobe.io';
 const TRAVA_TELAS_IDENTIFIER = '[APP] travaTelasHomeProd';
@@ -388,6 +390,7 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
   });
 
   const offers = await getTravaTelasOffers(targetActivityId);
+  const evidence = [];
   const uniqueActivities = new Map();
 
   offers.forEach(({ activityId, activityType }) => {
@@ -407,13 +410,12 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
     const activityDetail = await getActivityDetails(activityId, activityType);
     if (!activityDetail || !Array.isArray(activityDetail.options)) {
       console.log(`[updateTravaTelasOffersDate] Atividade ${activityId} sem opções válidas, ignorando.`);
-      return { updated: 0, evidence: [] };
+      return { updated: 0 };
     }
 
     const activityOffers = offers.filter((offer) => offer.activityId === activityId);
     let activityNeedsUpdate = false;
     let updatedInActivity = 0;
-    const activityEvidence = [];
 
     const updatedOptions = await Promise.all(activityDetail.options.map(async (option) => {
       const optionType = normalizeString(option.type || 'json');
@@ -440,7 +442,7 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
           await updateOfferContent(option.offerId, offerType, newContent, activityDetail.workspace);
           updatedInActivity += 1;
           activityNeedsUpdate = true;
-          activityEvidence.push({
+          evidence.push({
             activityId,
             offerId: option.offerId,
             type: 'Shared Offer',
@@ -463,7 +465,7 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
           console.log(`[updateTravaTelasOffersDate] Conteúdo embutido alterado para ${optionIdentifier || 'sem-id'}.`);
           updatedInActivity += 1;
           activityNeedsUpdate = true;
-          activityEvidence.push({
+          evidence.push({
             activityId,
             offerId: option.optionLocalId,
             type: 'Embedded Offer',
@@ -491,11 +493,10 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
       console.log(`[updateTravaTelasOffersDate] Nenhuma atualização necessária para atividade ${activityId}.`);
     }
 
-    return { updated: updatedInActivity, evidence: activityEvidence };
+    return { updated: updatedInActivity };
   }));
 
   const updatedCount = activityResults.reduce((total, result) => total + result.updated, 0);
-  const evidence = activityResults.flatMap((result) => result.evidence || []);
 
   return {
     updatedCount,

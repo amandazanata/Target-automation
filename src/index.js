@@ -5,6 +5,14 @@ const targetRouter = require('./routes/target');
 
 const app = express();
 
+app.use((req, res, next) => {
+  // eslint-disable-next-line no-console
+  console.log(`[REQUEST] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+app.use(express.json());
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/target', targetRouter);

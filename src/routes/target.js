@@ -40,6 +40,8 @@ router.get('/automation/trava-telas/export', async (req, res) => {
 });
 
 router.put('/automation/trava-telas/update-date', async (req, res) => {
+  // eslint-disable-next-line no-console
+  console.log('Iniciando rota PUT /automation/trava-telas/update-date');
   try {
     const { activityId } = req.query;
     const result = await adobeTargetService.updateTravaTelasOffersDate(activityId || null);
