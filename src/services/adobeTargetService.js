@@ -337,6 +337,44 @@ async function getTravaTelasOffers(targetActivityId = null) {
   return results.flat();
 }
 
+function processContentName(content, dateSuffix) {
+  if (!content) return { newContent: content, changed: false };
+
+  const contentIsString = typeof content === 'string';
+  let parsedContent = content;
+
+  if (contentIsString) {
+    try {
+      parsedContent = JSON.parse(content);
+    } catch (error) {
+      console.warn(`Failed to parse content: ${error.message}`);
+      return { newContent: content, changed: false };
+    }
+  }
+
+  if (typeof parsedContent !== 'object' || parsedContent === null) {
+    return { newContent: content, changed: false };
+  }
+
+  const payload = parsedContent.payload || {};
+  if (!payload.nomeOferta) {
+    return { newContent: content, changed: false };
+  }
+
+  const currentName = payload.nomeOferta.toString().trim();
+  const baseName = currentName.replace(/-\d{8}$/, '').replace(/-+$/, '');
+  const updatedName = `${baseName}-${dateSuffix}`;
+
+  if (updatedName === currentName) {
+    return { newContent: content, changed: false };
+  }
+
+  const updatedContent = { ...parsedContent, payload: { ...payload, nomeOferta: updatedName } };
+  const finalContent = contentIsString ? JSON.stringify(updatedContent) : updatedContent;
+
+  return { newContent: finalContent, changed: true };
+}
+
 async function updateTravaTelasOffersDate(targetActivityId = null) {
   const today = new Date();
   const yyyy = today.getFullYear();
@@ -354,48 +392,62 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
     }
   });
 
-  let updatedCount = 0;
+  const activityEntries = Array.from(uniqueActivities.values());
 
-  for (const { activityId, activityType } of uniqueActivities.values()) {
+  const activityResults = await Promise.all(activityEntries.map(async ({
+    activityId,
+    activityType,
+  }) => {
     const activityDetail = await getActivityDetails(activityId, activityType);
-    if (!activityDetail || !Array.isArray(activityDetail.options)) continue;
+    if (!activityDetail || !Array.isArray(activityDetail.options)) {
+      return { updated: 0 };
+    }
 
-    let hasChanges = false;
+    const activityOffers = offers.filter((offer) => offer.activityId === activityId);
+    let activityNeedsUpdate = false;
+    let updatedInActivity = 0;
 
-    const updatedOptions = activityDetail.options.map((option) => {
-      if (normalizeString(option.type) !== 'json' || !option.content) return option;
+    const updatedOptions = await Promise.all(activityDetail.options.map(async (option) => {
+      const optionType = normalizeString(option.type || 'json');
+      const hasEmbeddedContent = Boolean(option.content);
 
-      let parsedContent = option.content;
-      const contentIsString = typeof parsedContent === 'string';
+      // Cenário A: Shared Offer (possui offerId, porém sem content incorporado)
+      if (option.offerId && !hasEmbeddedContent) {
+        const optionOffer = activityOffers.find((offer) => offer.offerId === option.offerId);
+        const offerType = optionOffer ? optionOffer.offerType : (option.type || 'json');
+        let offerContent = optionOffer?.offer?.content || null;
 
-      if (contentIsString) {
-        try {
-          parsedContent = JSON.parse(parsedContent);
-        } catch (error) {
-          console.warn(`Failed to parse content for option ${option.optionLocalId}: ${error.message}`);
-          return option;
+        if (!offerContent) {
+          const offerDetails = await getOfferDetails(option.offerId, offerType);
+          offerContent = offerDetails.content;
+        }
+
+        const { newContent, changed } = processContentName(offerContent, formattedDate);
+
+        if (changed) {
+          await updateOfferContent(option.offerId, offerType, newContent, activityDetail.workspace);
+          updatedInActivity += 1;
+          activityNeedsUpdate = true;
+        }
+
+        return option;
+      }
+
+      // Cenário B: Embedded Offer (conteúdo dentro da própria option)
+      if (hasEmbeddedContent && optionType === 'json') {
+        const { newContent, changed } = processContentName(option.content, formattedDate);
+
+        if (changed) {
+          updatedInActivity += 1;
+          activityNeedsUpdate = true;
+          return { ...option, content: newContent };
         }
       }
 
-      const payload = parsedContent.payload || {};
-      if (!payload.nomeOferta) return option;
+      return option;
+    }));
 
-      const currentName = payload.nomeOferta.toString().trim();
-      const baseName = currentName.replace(/-\d{8}$/, '').replace(/-+$/, '');
-      const updatedName = `${baseName}-${formattedDate}`;
-
-      if (updatedName === currentName) return option;
-
-      hasChanges = true;
-      updatedCount += 1;
-
-      const updatedContent = { ...parsedContent, payload: { ...payload, nomeOferta: updatedName } };
-      const finalContent = contentIsString ? JSON.stringify(updatedContent) : updatedContent;
-
-      return { ...option, content: finalContent };
-    });
-
-    if (hasChanges) {
+    if (activityNeedsUpdate) {
       const activityPayload = { ...activityDetail, options: updatedOptions };
       delete activityPayload.stateComputed;
       delete activityPayload.revisions;
@@ -403,7 +455,11 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
 
       await updateActivity(activityId, activityType, activityPayload);
     }
-  }
+
+    return { updated: updatedInActivity };
+  }));
+
+  const updatedCount = activityResults.reduce((total, result) => total + result.updated, 0);
 
   return { updatedCount, totalOffers: offers.length, date: formattedDate };
 }
