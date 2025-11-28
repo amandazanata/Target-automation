@@ -380,8 +380,8 @@ async function updateTravaTelasOffersDate(targetActivityId = null) {
       const payload = parsedContent.payload || {};
       if (!payload.nomeOferta) return option;
 
-      const currentName = payload.nomeOferta.toString();
-      const baseName = currentName.replace(/-\d{8}$/, '');
+      const currentName = payload.nomeOferta.toString().trim();
+      const baseName = currentName.replace(/-\d{8}$/, '').replace(/-+$/, '');
       const updatedName = `${baseName}-${formattedDate}`;
 
       if (updatedName === currentName) return option;
