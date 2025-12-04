@@ -57,19 +57,17 @@ const normalizeString = (value = '') => value.toString().toLowerCase();
 
 // --- FUNÇÕES AUXILIARES DE ESTRUTURAÇÃO ---
 
-const getAudienceDetails = (audienceIds = [], audienceList = []) => {
+const getAudienceDetails = (audienceIds = []) => {
   if (!audienceIds || audienceIds.length === 0) {
     return { name: 'ALL VISITORS', id: null };
   }
-  const audienceOverview = audienceList.find((audience) => audience.id === audienceIds[0]);
-  const name = audienceOverview
-    ? audienceOverview.name || audienceOverview.type
-    : 'AUDIENCE NOT FOUND';
+  const [audienceId] = audienceIds;
+  const name = audienceId ? `Audience ID: ${audienceId}` : 'AUDIENCE NOT FOUND';
 
-  return { name, id: audienceIds[0] };
+  return { name, id: audienceId };
 };
 
-const buildCompleteActivity = (activityDetails, activityOverview, audienceList = []) => {
+const buildCompleteActivity = (activityDetails, activityOverview) => {
   const {
     experiences = [],
     locations,
@@ -114,7 +112,7 @@ const buildCompleteActivity = (activityDetails, activityOverview, audienceList =
 
       acc.push({
         ...option,
-        audienceDetails: getAudienceDetails(audienceIds, audienceList),
+        audienceDetails: getAudienceDetails(audienceIds),
         ordination: {
           priority,
           position: correspondingExperience.position,
@@ -172,19 +170,6 @@ async function getActivityDetails(activityId, activityType) {
   }
 }
 
-async function getAudiences() {
-  const accessToken = await fetchAccessToken();
-  try {
-    const { data } = await axios.get(`${TARGET_API_BASE_URL}/${tenantId}/target/audiences`, {
-      headers: buildAuthHeaders(accessToken),
-    });
-    return data;
-  } catch (error) {
-    console.warn('Failed to fetch audiences, continuing without audience names.');
-    return { audiences: [] };
-  }
-}
-
 async function getOffers() {
   const accessToken = await fetchAccessToken();
   try {
@@ -212,12 +197,12 @@ async function getOfferDetails(offerId, offerType) {
   }
 }
 
-async function updateOfferContent(offerId, offerType, content) {
+async function updateOfferContent(offerId, _offerType, content) {
   const accessToken = await fetchAccessToken();
 
   try {
     const { data } = await axios.put(
-      `${TARGET_API_BASE_URL}/${tenantId}/target/offers/${offerType}/${offerId}`,
+      `${TARGET_API_BASE_URL}/${tenantId}/target/offers/json/${offerId}`,
       { content },
       { headers: buildAuthHeaders(accessToken) },
     );
@@ -257,14 +242,12 @@ async function buildOffersContent(activity, listOffers) {
 
 async function getTravaTelasOffers(targetActivityId = null) {
   // 1. Buscar listas base em paralelo
-  const [activitiesData, audiencesData, offersData] = await Promise.all([
+  const [activitiesData, offersData] = await Promise.all([
     getActivities(),
-    getAudiences(),
     getOffers(),
   ]);
 
   const activities = activitiesData.activities || [];
-  const audienceList = audiencesData.audiences || [];
   const offerList = offersData.offers || [];
 
   // 2. Filtrar Atividades (Nome e Status)
@@ -299,7 +282,6 @@ async function getTravaTelasOffers(targetActivityId = null) {
       const structuredActivity = buildCompleteActivity(
         activityDetails,
         activityOverview,
-        audienceList,
       );
 
       // Busca o conteúdo das ofertas encontradas
